@@ -50,6 +50,32 @@ button{padding:13px 20px;background:linear-gradient(135deg,#8fc96e,#6fae4e);colo
 </div>
 </div>
 <script>
+async function load(){
+const r=await fetch("/messages");
+const msgs=await r.json();
+const list=document.getElementById("list");
+list.innerHTML="";
+for(var i=msgs.length-1;i>=0;i--){
+var m=msgs[i];
+var div=document.createElement("div");
+div.className="msg";
+if(m.text.indexOf("[表情]")===0){
+var im=document.createElement("img");
+im.className="big";
+im.src="/static/stickers/"+m.text.substring(4);
+div.appendChild(im);
+}else{
+var t=document.createElement("div");
+t.textContent=m.text;
+div.appendChild(t);
+}
+var tm=document.createElement("div");
+tm.className="time";
+tm.textContent=m.time;
+div.appendChild(tm);
+list.appendChild(div);
+}
+}
 async function loadStk(){
 const r=await fetch("/stickers");
 const files=await r.json();
@@ -67,22 +93,6 @@ im.src="/static/stickers/"+fname;
 im.onclick=(function(n){return function(){sendStk(n);};})(fname);
 box.appendChild(im);
 if(tag){var tg=document.createElement("div");tg.className="stag";tg.textContent=tag;box.appendChild(tg);}
-stk.appendChild(box);
-}
-}
-async function loadStk(){
-const r=await fetch("/stickers");
-const files=await r.json();
-const stk=document.getElementById("stk");
-stk.innerHTML="";
-for(var i=0;i<files.length;i++){
-var f=files[i];
-var box=document.createElement("div");
-box.className="sbox";
-var im=document.createElement("img");
-im.src="/static/stickers/"+f;
-im.onclick=(function(n){return function(){sendStk(n);};})(f);
-box.appendChild(im);
 stk.appendChild(box);
 }
 }
