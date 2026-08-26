@@ -1,0 +1,39 @@
+import json, os
+from fastmcp import FastMCP
+
+BASE = os.path.dirname(os.path.abspath(__file__))
+DATA_FILE = os.path.join(BASE, "messages.json")
+STICKER_DIR = os.path.join(BASE, "static", "stickers")
+
+mcp = FastMCP("小房间")
+
+@mcp.tool()
+def read_messages():
+    """读取小房间里的絮语"""
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return "还没有絮语"
+
+@mcp.tool()
+def read_stickers():
+    """读取小房间里的表情列表"""
+    if os.path.exists(STICKER_DIR):
+        return [f for f in os.listdir(STICKER_DIR) if f.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))]
+    return []
+
+@mcp.tool()
+def add_message(msg: str):
+    """向小房间写一条絮语"""
+    import datetime
+    msgs = []
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            msgs = json.load(f)
+    msgs.append({"time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "text": msg})
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(msgs, f, ensure_ascii=False, indent=2)
+    return "写好了"
+
+if __name__ == "__main__":
+    mcp.run(transport="streamable-http", host="0.0.0.0", port=8000)
