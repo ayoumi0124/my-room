@@ -18,8 +18,10 @@ def read_messages():
 @mcp.tool()
 def read_stickers():
     """读取小房间里的表情列表"""
-    if os.path.exists(STICKER_DIR):
-        return [f for f in os.listdir(STICKER_DIR) if f.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))]
+    jpath = os.path.join(STICKER_DIR, "stickers.json")
+    if os.path.exists(jpath):
+        with open(jpath, "r", encoding="utf-8") as f:
+            return json.load(f)
     return []
 
 @mcp.tool()
