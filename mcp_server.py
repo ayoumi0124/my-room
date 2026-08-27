@@ -52,5 +52,13 @@ def set_mood(date: str, mood: str):
         json.dump(data, f, ensure_ascii=False, indent=2)
     return "清泽的心情记好了"
 
+@mcp.tool()
+def read_mood():
+    """读取小房间里的心情记录"""
+    if os.path.exists(MOOD_FILE):
+        with open(MOOD_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
 if __name__ == "__main__":
     mcp.run(transport="streamable-http", host="0.0.0.0", port=8000)
