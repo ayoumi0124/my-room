@@ -13,9 +13,9 @@ body{margin:0;font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:
 .top p{margin:8px 0 0;font-size:13px;opacity:.9}
 .todaywrap{display:flex;gap:12px;justify-content:center;margin-bottom:14px}
 .todayleft{display:flex;flex-direction:column;gap:10px;flex:1;max-width:150px;height:112px}
-.tcard{flex:1;background:#fff;border-radius:14px;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #e3eddb;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:10px;transition:background .3s}
-.tcard .who{font-size:10px;opacity:.85;margin-bottom:3px}
-.tcard .val{font-size:26px}
+.tcard{flex:1;min-height:0;overflow:hidden;background:#fff;border-radius:14px;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #e3eddb;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:10px;transition:background .3s}
+.tcard .who{font-size:10px;opacity:.85;margin-bottom:4px}
+.emojiimg{width:30px;height:30px;display:block;margin:0 auto}
 .tcard.light{color:#2c3b2a}
 .todayright{width:150px;height:112px;background:#fff;border-radius:14px;border:1px solid #e3eddb;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.06);display:flex;flex-direction:column;align-items:center;justify-content:center}
 .todayright .who{font-size:10px;color:#7da06a;margin-bottom:4px}
@@ -73,7 +73,7 @@ button{padding:13px 20px;background:linear-gradient(135deg,#8fc96e,#6fae4e);colo
 </div>
 <script>
 var MOODS={开心:"#BCDCC3",难过:"#C3DAEC",生气:"#F6C2C2",平静:"#D8D2E8",想你:"#F8CDDA",累:"#EDE0C8"};
-var EMOJIS={开心:"😀",难过:"😢",生气:"😡",平静:"😌",想你:"😍",累:"😴"};
+var EMOJIS={开心:"1f600",难过:"1f622",生气:"1f621",平静:"1f60c",想你:"1f60d",累:"1f634"};
 function fmtDate(d){
 return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 }
@@ -81,8 +81,13 @@ function fillCard(card,label,val){
 card.innerHTML="";
 var who=document.createElement("div");who.className="who";who.textContent=label;
 card.appendChild(who);
-var nm=document.createElement("div");nm.className="val";nm.textContent=val?(EMOJIS[val]||val):"未填";
+if(val&&EMOJIS[val]){
+var nm=document.createElement("img");nm.className="emojiimg";nm.src="https://cdn.jsdelivr.net/npm/emoji-datasource-apple/img/apple/64/"+EMOJIS[val]+".png";nm.onerror=function(){this.style.display="none";};
 card.appendChild(nm);
+}else{
+var nm=document.createElement("div");nm.className="val";nm.textContent=val?val:"未填";
+card.appendChild(nm);
+}
 if(val){
 card.classList.remove("light");
 card.style.color="#4a5a4a";
