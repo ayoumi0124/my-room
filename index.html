@@ -15,7 +15,7 @@ body{margin:0;font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:
 .todayleft{display:flex;flex-direction:column;gap:10px;flex:1;max-width:150px;height:112px}
 .tcard{flex:1;background:#fff;border-radius:14px;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #e3eddb;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:background .3s}
 .tcard .who{font-size:10px;color:inherit;opacity:.85;margin-bottom:3px}
-.tcard .val{font-size:13px;font-weight:600}
+.tcard .val{font-size:26px}
 .tcard .dot{width:12px;height:12px;border-radius:50%;margin:0 auto 3px;background:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.6)}
 .tcard.light{color:#2c3b2a}
 .tcard.light .dot{border:1px solid #e3eddb;background:#e8efe2}
@@ -74,17 +74,15 @@ button{padding:13px 20px;background:linear-gradient(135deg,#8fc96e,#6fae4e);colo
 </div>
 </div>
 <script>
-var MOODS={开心:"#A9D6B0",难过:"#A8C9E0",生气:"#F2A7A7",平静:"#C7BED9",想你:"#F5B8C8",累:"#E6D3B3"};
-function fmtDate(d){
+var MOODS={开心:"#BCDCC3",难过:"#C3DAEC",生气:"#F6C2C2",平静:"#D8D2E8",想你:"#F8CDDA",累:"#EDE0C8"};
+var EMOJIS={开心:"☺️",难过:"😢",生气:"😡",平静:"😌",想你:"😚",累:"😞"};
 return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 }
 function fillCard(card,label,val){
 card.innerHTML="";
 var who=document.createElement("div");who.className="who";who.textContent=label;
 card.appendChild(who);
-var dot=document.createElement("div");dot.className="dot";dot.style.background=val?MOODS[val]||"#e8efe2":"#e8efe2";
-card.appendChild(dot);
-var nm=document.createElement("div");nm.className="val";nm.textContent=val?val:"未填";
+var nm=document.createElement("div");nm.className="val";nm.textContent=val?(EMOJIS[val]||val):"未填";
 card.appendChild(nm);
 if(val){
 card.classList.remove("light");
