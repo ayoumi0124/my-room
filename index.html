@@ -77,15 +77,10 @@ var EMOJIS={开心:"1f600",难过:"1f622",生气:"1f621",平静:"1f60c",想你:"
 function fmtDate(d){
 return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 }
-function fillCard(card,label,val){
+function fillCard(card,val){
 card.innerHTML="";
-var who=document.createElement("div");who.className="who";who.textContent=label;
-card.appendChild(who);
 if(val&&EMOJIS[val]){
 var nm=document.createElement("img");nm.className="emojiimg";nm.src="https://cdn.jsdelivr.net/npm/emoji-datasource-apple/img/apple/64/"+EMOJIS[val]+".png";nm.onerror=function(){this.style.display="none";};
-card.appendChild(nm);
-}else{
-var nm=document.createElement("div");nm.className="val";nm.textContent=val?val:"未填";
 card.appendChild(nm);
 }
 if(val){
@@ -107,8 +102,8 @@ const m=data[key]||{};
 const me=document.getElementById("todayme");
 const qz=document.getElementById("todayqz");
 const wx=document.getElementById("todaywx");
-fillCard(me,"我的心情",m.me);
-fillCard(qz,"清泽的心情",m.qz);
+fillCard(me,m.me);
+fillCard(qz,m.qz);
 wx.innerHTML="";
 var w1=document.createElement("div");w1.className="who";w1.textContent="今天天气";
 wx.appendChild(w1);
