@@ -12,12 +12,14 @@ body{margin:0;font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:
 .top h1{margin:0;font-size:20px;letter-spacing:1px;font-style:italic}
 .top p{margin:8px 0 0;font-size:13px;opacity:.9}
 .todaywrap{display:flex;gap:12px;justify-content:center;margin-bottom:14px}
-.todayleft{display:flex;flex-direction:column;gap:10px;flex:1;max-width:150px;height:146px}
-.tcard{flex:1;background:#fff;border-radius:14px;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #e3eddb;padding:10px 6px;display:flex;flex-direction:column;align-items:center;justify-content:center}
-.tcard .who{font-size:10px;color:#7da06a;margin-bottom:4px}
-.tcard .val{font-size:13px;font-weight:600;color:#3d5a33}
-.tcard .dot{width:14px;height:14px;border-radius:50%;margin:0 auto 4px;background:#e8efe2}
-.todayright{width:150px;height:146px;background:#fff;border-radius:14px;border:1px solid #e3eddb;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.06);display:flex;flex-direction:column;align-items:center;justify-content:center}
+.todayleft{display:flex;flex-direction:column;gap:10px;flex:1;max-width:150px;height:112px}
+.tcard{flex:1;background:#fff;border-radius:14px;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #e3eddb;display:flex;flex-direction:column;align-items:center;justify-content:center;transition:background .3s}
+.tcard .who{font-size:10px;color:inherit;opacity:.85;margin-bottom:3px}
+.tcard .val{font-size:13px;font-weight:600}
+.tcard .dot{width:12px;height:12px;border-radius:50%;margin:0 auto 3px;background:rgba(255,255,255,.7);border:1px solid rgba(255,255,255,.6)}
+.tcard.light{color:#2c3b2a}
+.tcard.light .dot{border:1px solid #e3eddb;background:#e8efe2}
+.todayright{width:150px;height:112px;background:#fff;border-radius:14px;border:1px solid #e3eddb;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.06);display:flex;flex-direction:column;align-items:center;justify-content:center}
 .todayright .who{font-size:10px;color:#7da06a;margin-bottom:4px}
 .todayright .val{font-size:20px;font-weight:700;color:#3d5a33}
 .moods{display:none;flex-wrap:wrap;gap:8px;padding:10px 2px;margin-bottom:14px}
@@ -52,8 +54,8 @@ button{padding:13px 20px;background:linear-gradient(135deg,#8fc96e,#6fae4e);colo
 </div>
 <div class="todaywrap">
 <div class="todayleft">
-<div class="tcard" id="todayme"></div>
-<div class="tcard" id="todayqz"></div>
+<div class="tcard light" id="todayme"></div>
+<div class="tcard light" id="todayqz"></div>
 </div>
 <div class="todayright" id="todaywx"></div>
 </div>
@@ -72,22 +74,26 @@ button{padding:13px 20px;background:linear-gradient(135deg,#8fc96e,#6fae4e);colo
 </div>
 </div>
 <script>
-var MOODS={开心:"#7db55e",难过:"#5b8fb9",生气:"#d96c6c",平静:"#b8c2b0",想你:"#e89ac0",累:"#c9a86a"};
+var MOODS={开心:"#A9D6B0",难过:"#A8C9E0",生气:"#F2A7A7",平静:"#C7BED9",想你:"#F5B8C8",累:"#E6D3B3"};
 function fmtDate(d){
 return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 }
-function fillCard(card,label,val,dot){
+function fillCard(card,label,val){
 card.innerHTML="";
 var who=document.createElement("div");who.className="who";who.textContent=label;
 card.appendChild(who);
-if(dot){
-var bd=document.createElement("div");bd.className="dot";bd.style.background=val?MOODS[val]||"#e8efe2":"#e8efe2";
-card.appendChild(bd);
+var dot=document.createElement("div");dot.className="dot";dot.style.background=val?MOODS[val]||"#e8efe2":"#e8efe2";
+card.appendChild(dot);
 var nm=document.createElement("div");nm.className="val";nm.textContent=val?val:"未填";
 card.appendChild(nm);
+if(val){
+card.classList.remove("light");
+card.style.color="#4a5a4a";
+card.style.background=MOODS[val]||"#fff";
 }else{
-var nm=document.createElement("div");nm.className="val";nm.textContent=val||"--";
-card.appendChild(nm);
+card.classList.add("light");
+card.style.color="#2c3b2a";
+card.style.background="#fff";
 }
 }
 async function loadMood(){
@@ -99,8 +105,8 @@ const m=data[key]||{};
 const me=document.getElementById("todayme");
 const qz=document.getElementById("todayqz");
 const wx=document.getElementById("todaywx");
-fillCard(me,"我的心情",m.me,true);
-fillCard(qz,"清泽的心情",m.qz,true);
+fillCard(me,"我的心情",m.me);
+fillCard(qz,"清泽的心情",m.qz);
 wx.innerHTML="";
 var w1=document.createElement("div");w1.className="who";w1.textContent="今天天气";
 wx.appendChild(w1);
@@ -140,7 +146,7 @@ var idx=prompt(msg,"1");
 if(!idx)return;
 var n=names[parseInt(idx)-1];
 if(!n)return;
-fetch("/mood_set?date="+date+"&"+who+"="+encodeURIComponent(n)).then(function(){loadMood();toggleMoods();});
+fetch("/mood_set?date="+date+"&"+who+"="+encodeURIComponent(n)).then(loadMood);
 }
 async function load(){
 const r=await fetch("/messages");
