@@ -11,6 +11,11 @@ body{margin:0;font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:
 .top{background:linear-gradient(135deg,#8fc96e,#6fae4e);border-radius:20px;padding:22px 20px;color:#fff;box-shadow:0 6px 18px rgba(111,174,78,.25);margin-bottom:18px}
 .top h1{margin:0;font-size:20px;letter-spacing:1px;font-style:italic}
 .top p{margin:8px 0 0;font-size:13px;opacity:.9}
+.moods{display:flex;gap:8px;overflow-x:auto;padding:10px 2px;margin-bottom:14px}
+.mood{background:#fff;border-radius:12px;padding:8px;min-width:54px;text-align:center;border:1px solid #e3eddb;cursor:pointer;flex-shrink:0}
+.mood .d{font-size:11px;color:#7da06a}
+.mood .dots{display:flex;justify-content:center;gap:5px;margin-top:5px}
+.mood .dot{width:13px;height:13px;border-radius:50%}
 .msg{background:#fff;border-radius:14px;padding:13px 16px;margin:10px 0;box-shadow:0 2px 8px rgba(0,0,0,.05);border-left:4px solid #a8d08d;animation:pop .25s ease}
 @keyframes pop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .time{color:#a4b59c;font-size:12px;margin-top:6px}
@@ -36,6 +41,7 @@ button{padding:13px 20px;background:linear-gradient(135deg,#8fc96e,#6fae4e);colo
 <h1>🌿 Citrus aurantiifolia 🌿</h1>
 <p>The room about AI</p >
 </div>
+<div class="moods" id="moods"></div>
 <div id="list"></div>
 </div>
 <div class="bar">
@@ -50,6 +56,37 @@ button{padding:13px 20px;background:linear-gradient(135deg,#8fc96e,#6fae4e);colo
 </div>
 </div>
 <script>
+var MOODS={开心:"#7db55e",难过:"#5b8fb9",生气:"#d96c6c",平静:"#b8c2b0",想你:"#e89ac0",累:"#c9a86a"};
+async function loadMood(){
+const r=await fetch("/mood");
+const data=await r.json();
+const box=document.getElementById("moods");
+box.innerHTML="";
+const today=new Date();
+for(var i=13;i>=0;i--){
+var d=new Date(today);d.setDate(d.getDate()-i);
+var key=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+var m=data[key]||{};
+var dv=document.createElement("div");dv.className="mood";
+var dt=document.createElement("div");dt.className="d";dt.textContent=(d.getMonth()+1)+"/"+d.getDate();
+dv.appendChild(dt);
+var dots=document.createElement("div");dots.className="dots";
+var dm=document.createElement("div");dm.className="dot";dm.style.background=m.me?MOODS[m.me]||"#ccc":"#e8efe2";
+var dq=document.createElement("div");dq.className="dot";dq.style.background=m.qz?MOODS[m.qz]||"#ccc":"#e8efe2";
+dots.appendChild(dm);dots.appendChild(dq);dv.appendChild(dots);
+dv.onclick=function(k){return function(){pickMood(k);};}(key);
+box.appendChild(dv);
+}
+}
+function pickMood(date){
+var names=["开心","难过","生气","平静","想你","累"];
+var msg="选一个今天的心情\n"+names.map(function(n,i){return (i+1)+" "+n;}).join("\n");
+var idx=prompt(msg,"1");
+if(!idx)return;
+var n=names[parseInt(idx)-1];
+if(!n)return;
+fetch("/mood_set?date="+date+"&me="+encodeURIComponent(n)).then(loadMood);
+}
 async function load(){
 const r=await fetch("/messages");
 const msgs=await r.json();
@@ -62,65 +99,4 @@ div.className="msg";
 if(m.text.indexOf("[表情]")===0){
 var im=document.createElement("img");
 im.className="big";
-im.src="/static/stickers/"+m.text.substring(4);
-div.appendChild(im);
-}else{
-var t=document.createElement("div");
-t.textContent=m.text;
-div.appendChild(t);
-}
-var tm=document.createElement("div");
-tm.className="time";
-tm.textContent=m.time;
-div.appendChild(tm);
-list.appendChild(div);
-}
-}
-async function loadStk(){
-const r=await fetch("/stickers");
-const files=await r.json();
-const stk=document.getElementById("stk");
-stk.innerHTML="";
-for(var i=0;i<files.length;i++){
-var item=files[i];
-var fname=item;
-var tag="";
-if(typeof item==="object"){fname=item.file;tag=item.tag||"";}
-var box=document.createElement("div");
-box.className="sbox";
-var im=document.createElement("img");
-im.src="/static/stickers/"+fname;
-im.onclick=(function(n){return function(){sendStk(n);};})(fname);
-box.appendChild(im);
-if(tag){var tg=document.createElement("div");tg.className="stag";tg.textContent=tag;box.appendChild(tg);}
-stk.appendChild(box);
-}
-}
-function sendStk(f){
-fetch("/save?msg="+encodeURIComponent("[表情]"+f)).then(load);
-}
-document.getElementById("f").onsubmit=function(e){
-e.preventDefault();
-var t=document.getElementById("txt").value.trim();
-if(!t)return;
-fetch("/save?msg="+encodeURIComponent(t)).then(function(){
-document.getElementById("txt").value="";
-load();
-});
-};
-document.getElementById("up").onchange=function(e){
-var fd=new FormData();
-fd.append("file",e.target.files[0]);
-var tg=document.getElementById("tag").value.trim();
-if(tg){fd.append("tag",tg);}
-fetch("/upload",{method:"POST",body:fd}).then(function(){
-e.target.value="";
-document.getElementById("tag").value="";
-loadStk();
-});
-};
-load();
-loadStk();
-</script>
-</body>
-</html>
+im.src="/static/stickers/"+m.text.subs
