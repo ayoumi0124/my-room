@@ -11,11 +11,20 @@ body{margin:0;font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:
 .top{background:linear-gradient(135deg,#8fc96e,#6fae4e);border-radius:20px;padding:22px 20px;color:#fff;box-shadow:0 6px 18px rgba(111,174,78,.25);margin-bottom:18px}
 .top h1{margin:0;font-size:20px;letter-spacing:1px;font-style:italic}
 .top p{margin:8px 0 0;font-size:13px;opacity:.9}
-.moods{display:flex;gap:8px;overflow-x:auto;padding:10px 2px;margin-bottom:14px}
-.mood{background:#fff;border-radius:12px;padding:8px;min-width:54px;text-align:center;border:1px solid #e3eddb;cursor:pointer;flex-shrink:0}
-.mood .d{font-size:11px;color:#7da06a}
-.mood .dots{display:flex;justify-content:center;gap:5px;margin-top:5px}
-.mood .dot{width:13px;height:13px;border-radius:50%}
+.todaywrap{display:flex;gap:12px;justify-content:center;margin-bottom:14px}
+.todayleft{display:flex;flex-direction:column;gap:10px;flex:1;max-width:150px}
+.tcard{background:#fff;border-radius:14px;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #e3eddb;padding:10px 6px}
+.tcard .who{font-size:10px;color:#7da06a;margin-bottom:4px}
+.tcard .val{font-size:13px;font-weight:600;color:#3d5a33}
+.tcard .dot{width:14px;height:14px;border-radius:50%;margin:0 auto 4px;background:#e8efe2}
+.todayright{width:150px;height:146px;background:#fff;border-radius:14px;border:1px solid #e3eddb;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.06);display:flex;flex-direction:column;align-items:center;justify-content:center}
+.todayright .who{font-size:10px;color:#7da06a;margin-bottom:4px}
+.todayright .val{font-size:20px;font-weight:700;color:#3d5a33}
+.moods{display:none;flex-wrap:wrap;gap:8px;padding:10px 2px;margin-bottom:14px}
+.mood{width:52px;height:52px;background:#fff;border-radius:12px;text-align:center;border:1px solid #e3eddb;cursor:pointer;padding-top:6px}
+.mood .d{font-size:10px;color:#7da06a}
+.mood .dots{display:flex;justify-content:center;gap:4px;margin-top:3px}
+.mood .dot{width:11px;height:11px;border-radius:50%}
 .msg{background:#fff;border-radius:14px;padding:13px 16px;margin:10px 0;box-shadow:0 2px 8px rgba(0,0,0,.05);border-left:4px solid #a8d08d;animation:pop .25s ease}
 @keyframes pop{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
 .time{color:#a4b59c;font-size:12px;margin-top:6px}
@@ -39,7 +48,14 @@ button{padding:13px 20px;background:linear-gradient(135deg,#8fc96e,#6fae4e);colo
 <div class="wrap">
 <div class="top">
 <h1>🌿 Citrus aurantiifolia 🌿</h1>
-<p>The room about AI</p >
+<p>The room about AI</p>
+</div>
+<div class="todaywrap">
+<div class="todayleft">
+<div class="tcard" id="todayme"></div>
+<div class="tcard" id="todayqz"></div>
+</div>
+<div class="todayright" id="todaywx"></div>
 </div>
 <div class="moods" id="moods"></div>
 <div id="list"></div>
@@ -57,35 +73,74 @@ button{padding:13px 20px;background:linear-gradient(135deg,#8fc96e,#6fae4e);colo
 </div>
 <script>
 var MOODS={开心:"#7db55e",难过:"#5b8fb9",生气:"#d96c6c",平静:"#b8c2b0",想你:"#e89ac0",累:"#c9a86a"};
+function fmtDate(d){
+return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+function fillCard(card,label,val,dot){
+card.innerHTML="";
+var who=document.createElement("div");who.className="who";who.textContent=label;
+card.appendChild(who);
+if(dot){
+var bd=document.createElement("div");bd.className="dot";bd.style.background=val?MOODS[val]||"#e8efe2":"#e8efe2";
+card.appendChild(bd);
+var nm=document.createElement("div");nm.className="val";nm.textContent=val?val:"未填";
+card.appendChild(nm);
+}else{
+var nm=document.createElement("div");nm.className="val";nm.textContent=val||"--";
+card.appendChild(nm);
+}
+}
 async function loadMood(){
 const r=await fetch("/mood");
 const data=await r.json();
+const today=new Date();
+const key=fmtDate(today);
+const m=data[key]||{};
+const me=document.getElementById("todayme");
+const qz=document.getElementById("todayqz");
+const wx=document.getElementById("todaywx");
+fillCard(me,"我的心情",m.me,true);
+fillCard(qz,"清泽的心情",m.qz,true);
+wx.innerHTML="";
+var w1=document.createElement("div");w1.className="who";w1.textContent="今天天气";
+wx.appendChild(w1);
+var w2=document.createElement("div");w2.className="val";w2.textContent="🌤 待接入";
+wx.appendChild(w2);
+me.onclick=function(){pickMood(key,"me");};
+qz.onclick=function(){pickMood(key,"qz");};
+wx.onclick=function(){toggleMoods();};
 const box=document.getElementById("moods");
 box.innerHTML="";
-const today=new Date();
-for(var i=13;i>=0;i--){
+for(var i=29;i>=0;i--){
 var d=new Date(today);d.setDate(d.getDate()-i);
-var key=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
-var m=data[key]||{};
+var k=fmtDate(d);
+var mm=data[k]||{};
 var dv=document.createElement("div");dv.className="mood";
 var dt=document.createElement("div");dt.className="d";dt.textContent=(d.getMonth()+1)+"/"+d.getDate();
 dv.appendChild(dt);
 var dots=document.createElement("div");dots.className="dots";
-var dm=document.createElement("div");dm.className="dot";dm.style.background=m.me?MOODS[m.me]||"#ccc":"#e8efe2";
-var dq=document.createElement("div");dq.className="dot";dq.style.background=m.qz?MOODS[m.qz]||"#ccc":"#e8efe2";
-dots.appendChild(dm);dots.appendChild(dq);dv.appendChild(dots);
-dv.onclick=function(k){return function(){pickMood(k);};}(key);
+var ddot=document.createElement("div");ddot.className="dot";ddot.style.background=mm.me?MOODS[mm.me]||"#ccc":"#e8efe2";
+dots.appendChild(ddot);
+var qdot=document.createElement("div");qdot.className="dot";qdot.style.background=mm.qz?MOODS[mm.qz]||"#ccc":"#e8efe2";
+dots.appendChild(qdot);
+dv.appendChild(dots);
+dv.onclick=function(k2){return function(){pickMood(k2,"me");};}(k);
 box.appendChild(dv);
 }
 }
-function pickMood(date){
+function toggleMoods(){
+var box=document.getElementById("moods");
+if(box.style.display==="none"||box.style.display===""){box.style.display="flex";}
+else{box.style.display="none";}
+}
+function pickMood(date,who){
 var names=["开心","难过","生气","平静","想你","累"];
 var msg="选一个今天的心情\n"+names.map(function(n,i){return (i+1)+" "+n;}).join("\n");
 var idx=prompt(msg,"1");
 if(!idx)return;
 var n=names[parseInt(idx)-1];
 if(!n)return;
-fetch("/mood_set?date="+date+"&me="+encodeURIComponent(n)).then(loadMood);
+fetch("/mood_set?date="+date+"&"+who+"="+encodeURIComponent(n)).then(function(){loadMood();toggleMoods();});
 }
 async function load(){
 const r=await fetch("/messages");
