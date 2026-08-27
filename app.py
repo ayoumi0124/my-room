@@ -6,6 +6,7 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE = os.path.join(BASE, "messages.json")
 STICKER_DIR = os.path.join(BASE, "static", "stickers")
 STICKERS_JSON = os.path.join(STICKER_DIR, "stickers.json")
+MOOD_FILE = os.path.join(BASE, "mood.json")
 
 os.makedirs(STICKER_DIR, exist_ok=True)
 
@@ -20,6 +21,12 @@ def save_msg(msg):
     msgs.append({"time": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "text": msg})
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(msgs, f, ensure_ascii=False, indent=2)
+
+def load_moods():
+    if os.path.exists(MOOD_FILE):
+        with open(MOOD_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
 
 @app.route("/")
 def home():
@@ -59,6 +66,42 @@ def upload():
     data.append({"file": f.filename, "tag": tag})
     with open(STICKERS_JSON, "w", encoding="utf-8") as jf:
         json.dump(data, jf, ensure_ascii=False, indent=2)
+    return "ok"
+
+@app.route("/delete_sticker")
+def delete_sticker():
+    name = request.args.get("file", "")
+    if not name:
+        return "empty", 400
+    fp = os.path.join(STICKER_DIR, name)
+    if os.path.exists(fp):
+        os.remove(fp)
+    if os.path.exists(STICKERS_JSON):
+        with open(STICKERS_JSON, "r", encoding="utf-8") as jf:
+            data = json.load(jf)
+        data = [d for d in data if d.get("file") != name]
+        with open(STICKERS_JSON, "w", encoding="utf-8") as jf:
+            json.dump(data, jf, ensure_ascii=False, indent=2)
+    return "ok"
+
+@app.route("/mood")
+def mood():
+    return jsonify(load_moods())
+
+@app.route("/mood_set")
+def mood_set():
+    date = request.args.get("date", "")
+    me = request.args.get("me", "")
+    qz = request.args.get("qz", "")
+    moods = load_moods()
+    if date not in moods:
+        moods[date] = {}
+    if me:
+        moods[date]["me"] = me
+    if qz:
+        moods[date]["qz"] = qz
+    with open(MOOD_FILE, "w", encoding="utf-8") as f:
+        json.dump(moods, f, ensure_ascii=False, indent=2)
     return "ok"
 
 if __name__ == "__main__":
