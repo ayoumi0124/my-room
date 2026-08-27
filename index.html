@@ -99,4 +99,66 @@ div.className="msg";
 if(m.text.indexOf("[表情]")===0){
 var im=document.createElement("img");
 im.className="big";
-im.src="/static/stickers/"+m.text.subs
+im.src="/static/stickers/"+m.text.substring(4);
+div.appendChild(im);
+}else{
+var t=document.createElement("div");
+t.textContent=m.text;
+div.appendChild(t);
+}
+var tm=document.createElement("div");
+tm.className="time";
+tm.textContent=m.time;
+div.appendChild(tm);
+list.appendChild(div);
+}
+}
+async function loadStk(){
+const r=await fetch("/stickers");
+const files=await r.json();
+const stk=document.getElementById("stk");
+stk.innerHTML="";
+for(var i=0;i<files.length;i++){
+var item=files[i];
+var fname=item;
+var tag="";
+if(typeof item==="object"){fname=item.file;tag=item.tag||"";}
+var box=document.createElement("div");
+box.className="sbox";
+var im=document.createElement("img");
+im.src="/static/stickers/"+fname;
+im.onclick=(function(n){return function(){sendStk(n);};})(fname);
+box.appendChild(im);
+if(tag){var tg=document.createElement("div");tg.className="stag";tg.textContent=tag;box.appendChild(tg);}
+stk.appendChild(box);
+}
+}
+function sendStk(f){
+fetch("/save?msg="+encodeURIComponent("[表情]"+f)).then(load);
+}
+document.getElementById("f").onsubmit=function(e){
+e.preventDefault();
+var t=document.getElementById("txt").value.trim();
+if(!t)return;
+fetch("/save?msg="+encodeURIComponent(t)).then(function(){
+document.getElementById("txt").value="";
+load();
+});
+};
+document.getElementById("up").onchange=function(e){
+var fd=new FormData();
+fd.append("file",e.target.files[0]);
+var tg=document.getElementById("tag").value.trim();
+if(tg){fd.append("tag",tg);}
+fetch("/upload",{method:"POST",body:fd}).then(function(){
+e.target.value="";
+document.getElementById("tag").value="";
+loadStk();
+});
+};
+load();
+loadStk();
+loadMood();
+</script>
+</body>
+</html>
