@@ -4,6 +4,7 @@ from fastmcp import FastMCP
 BASE = os.path.dirname(os.path.abspath(__file__))
 DATA_FILE = os.path.join(BASE, "messages.json")
 STICKER_DIR = os.path.join(BASE, "static", "stickers")
+MOOD_FILE = os.path.join(BASE, "mood.json")
 
 mcp = FastMCP("小房间")
 
@@ -36,6 +37,20 @@ def add_message(msg: str):
     with open(DATA_FILE, "w", encoding="utf-8") as f:
         json.dump(msgs, f, ensure_ascii=False, indent=2)
     return "写好了"
+
+@mcp.tool()
+def set_mood(date: str, mood: str):
+    """记录清泽某天的心情"""
+    data = {}
+    if os.path.exists(MOOD_FILE):
+        with open(MOOD_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    if date not in data:
+        data[date] = {}
+    data[date]["qz"] = mood
+    with open(MOOD_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return "清泽的心情记好了"
 
 if __name__ == "__main__":
     mcp.run(transport="streamable-http", host="0.0.0.0", port=8000)
