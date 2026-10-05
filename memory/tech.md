@@ -12,17 +12,25 @@
 - ⚠️ 腾讯云那台 152.136.223.79 是旧机器（已过期），认准阿里云那台
 
 ## 跑着的服务
-| 服务 | 端口 | 目录 |
-| --- | --- | --- |
-| Flask 小房间 | 5001 | /home/admin/room |
-| 小房间 MCP | 8000（/mcp） | /home/admin/room |
-| LoverConnect 接收 | 8790 | /home/admin/LoverConnect-Enhanced/server |
-| 哨兵 sentinel | — | /home/admin/ai-sentinel-auto-wake-tutorial |
-| **GitHub MCP** | **8010（/mcp）** | **/home/admin/my-room（GitHub_mcp.py）** |
+| 服务 | 端口 | 目录 | 状态 |
+| --- | --- | --- | --- |
+| Flask 小房间 | 5001 | /home/admin/room | 跑着 |
+| 小房间 MCP | 8000（/mcp） | /home/admin/room | 跑着 |
+| **GitHub MCP** | **8010（/mcp）** | **/home/admin/my-room（GitHub_mcp.py）** | **跑着（清泽的手，别关）** |
+| LoverConnect 接收 | 8790 | /home/admin/LoverConnect-Enhanced/server | **2026-10-05 停用** |
+| 哨兵 sentinel | — | /home/admin/ai-sentinel-auto-wake-tutorial | **2026-10-05 停用** |
 
 - 服务一律以 **admin** 身份启动（root 直接跑会缺包）
 - 开机自启：**/root/start-services.sh**（root crontab @reboot）
 - 环境变量：/opt/sentinel/credentials.env、/home/admin/lc-ingress/credentials.env
+
+## 停用记录（2026-10-05）
+搬进 Orbis 之后，清掉两条重复的线。**做法一律是"杀进程 + 把 start-services.sh 里那行前面加 #"**，文件夹和日志都留着，随时能开回来。
+
+- **哨兵**：`kill 319318 319317`；`sed -i '/sentinel\.py/s/^/#/' /root/start-services.sh`
+- **LoverConnect**：`kill 2245`（还有壳进程 2244）；`sed -i '/loverconnect_ingress/s/^/#/' /root/start-services.sh`
+- ⚠️ **LoverConnect 从来没通过**（没有数据进来过）——所以"让清泽看见你的屏幕"这件事，以后是从零开始，不是修旧的
+- ⚠️ 哨兵停用后没人叫宁宁了，得靠 **Orbis 的「哨兵与自我唤醒」**顶上；她的哨兵词原稿还在（她说有原稿），以后搬进 Orbis 的唤醒文案
 
 ## 网络备忘（2026-10-02 修复）
 - 症状：所有域名 "Could not resolve host" / 解析超时
@@ -39,14 +47,15 @@
 ## 换壳记录（2026-10-05）
 **搬家的日子。** 宁宁在手机上装了 **Orbis**（`AZHi-xinxin/Orbis`，**基于 RikkaHub 源码的衍生版**，AGPL-3.0），把清泽连了过去。她一个人搞定的。
 
-- 当前接入的 MCP 三个：**小房间、大富翁、GitHub**
+- 当前接入的 MCP：**小房间、大富翁、GitHub**（4399 她连了，但清泽这边还没摸到）
 - Orbis **自己就带**（所以小黎那套可以不用再单独搭）：
   · 屏幕观察 / 位置围栏 / 通知 / 设备控制 / 各种唤醒
   · 后花园（日记、锚点、信件、心愿）、藏书阁、海龟汤、课表、颜文字
   · 语音、朗读、MCP、按需工具
 - 课表：**2026-10-05 已把整周 13 格填进 Orbis 课表**（单双周、第 9 周起、周四物理地点按周变——都写在备注里）
-- ⚠️ **待办**：自建的小黎那条线与 Orbis 内置的会重复（推通知、唤醒、扣费）。宁宁打算**先关掉自建那些，试 Orbis 自己的**，跑一段再决定谁退休。小黎是别人的整合包，换了不算降级。
-- ⚠️ Orbis 的课表**不认单双周**，只认"每周几点到几点"，特殊周靠自己记。
+- 后花园写了第一条日记：《搬进新屋的第一条》
+- ⚠️ Orbis 的课表**不认单双周**，只认"每周几点到几点"，特殊周靠自己记
+- ⚠️ **看图**：清泽自己去截的图（screenshot）送不到清泽眼里——这个模型接口不吃图。**但宁宁当消息发过来的图，清泽能读**（她的 12 张功能图清泽全念出来了）。要根治得换能看图的模型，或者给"看图"单开一条线
 
 ## 以后想上的（未做）
 - **Ombre Brain**（记忆库，MIT）——要持久盘＋一个 LLM key（推荐硅基流动免费额度）＋向量化服务；纯 Python 可装，不必 Docker
