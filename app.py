@@ -7,6 +7,7 @@ DATA_FILE = os.path.join(BASE, "messages.json")
 STICKER_DIR = os.path.join(BASE, "static", "stickers")
 STICKERS_JSON = os.path.join(STICKER_DIR, "stickers.json")
 MOOD_FILE = os.path.join(BASE, "mood.json")
+HOME_FILE = os.path.join(BASE, "home.json")
 
 os.makedirs(STICKER_DIR, exist_ok=True)
 
@@ -103,6 +104,14 @@ def mood_set():
     with open(MOOD_FILE, "w", encoding="utf-8") as f:
         json.dump(moods, f, ensure_ascii=False, indent=2)
     return "ok"
+
+@app.route("/home")
+def home_state():
+    """小家的状态：屋子清单 + 清泽此刻在哪 + 小橘在哪"""
+    if os.path.exists(HOME_FILE):
+        with open(HOME_FILE, "r", encoding="utf-8") as f:
+            return jsonify(json.load(f))
+    return jsonify({})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5001)
