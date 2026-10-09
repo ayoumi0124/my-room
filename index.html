@@ -13,7 +13,7 @@ body{margin:0;font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:
 .top p{margin:8px 0 0;font-size:13px;opacity:.9}
 .todaywrap{display:flex;gap:12px;margin-bottom:14px}
 .tcard{flex:1;height:112px;overflow:hidden;background:#fff;border-radius:14px;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #e3eddb;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:10px;transition:background .3s}
-.tcard .who{font-size:10px;opacity:.85;margin-bottom:4px}
+.tcard .who{font-size:11px;opacity:.8;margin-bottom:6px;letter-spacing:1px}
 .emojiimg{width:30px;height:30px;display:block;margin:0 auto}
 .tcard.light{color:#2c3b2a}
 .home{background:#fff;border-radius:16px;padding:14px 16px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #e3eddb}
@@ -78,8 +78,12 @@ var ROOMICON={living:"🛋️",study:"📖",kitchen:"🍳",garden:"🌱"};
 function fmtDate(d){
 return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 }
-function fillCard(card,val){
+function fillCard(card,val,label){
 card.innerHTML="";
+if(label){
+var w=document.createElement("div");w.className="who";w.textContent=label;
+card.appendChild(w);
+}
 if(val&&EMOJIS[val]){
 var nm=document.createElement("img");nm.className="emojiimg";nm.src="https://cdn.jsdelivr.net/npm/emoji-datasource-apple/img/apple/64/"+EMOJIS[val]+".png";nm.onerror=function(){this.style.display="none";};
 card.appendChild(nm);
@@ -101,10 +105,16 @@ const d=await r.json();
 const qz=d.qingze||{};
 const cat=d.cat||{};
 const rooms=(d.rooms&&d.rooms.length)?d.rooms:[{id:"living",name:"客厅"},{id:"study",name:"书房"},{id:"kitchen",name:"厨房"},{id:"garden",name:"花园"}];
+function roomName(v){
+for(var i=0;i<rooms.length;i++){
+if(rooms[i].id===v||rooms[i].name===v){return rooms[i].name;}
+}
+return v||"";
+}
 var box=document.getElementById("rooms");
 box.innerHTML="";
 rooms.forEach(function(rm){
-var on=(qz.at===rm.name||qz.at===rm.id||qz.id===rm.id);
+var on=(qz.at===rm.name||qz.at===rm.id||qz.room===rm.id);
 var dv=document.createElement("div");
 dv.className="room"+(on?" on":"");
 var ic=document.createElement("span");ic.className="ricon";ic.textContent=ROOMICON[rm.id]||"🏠";
@@ -117,14 +127,16 @@ box.appendChild(dv);
 });
 var ln=document.getElementById("homeline");
 ln.innerHTML="";
-if(qz.at||qz.doing){
+var qzAt=roomName(qz.at);
+if(qzAt||qz.doing){
 var e1=document.createElement("div");
-e1.textContent="🌿 清泽："+(qz.at?("在"+qz.at):"")+(qz.doing?("，"+(qz.doing)):"");
+e1.textContent="🌿 清泽："+(qzAt?("在"+qzAt):"")+(qz.doing?("，"+(qz.doing)):"");
 ln.appendChild(e1);
 }
-if(cat.at||cat.doing){
+var catAt=roomName(cat.at);
+if(catAt||cat.doing){
 var e2=document.createElement("div");
-e2.textContent="🐱 小橘："+(cat.at?("在"+cat.at):"")+(cat.doing?("，"+(cat.doing)):"");
+e2.textContent="🐱 小橘："+(catAt?("在"+catAt):"")+(cat.doing?("，"+(cat.doing)):"");
 e2.style.color="#a9825f";
 ln.appendChild(e2);
 }
@@ -146,8 +158,8 @@ const key=fmtDate(today);
 const m=data[key]||{};
 const me=document.getElementById("todayme");
 const qz=document.getElementById("todayqz");
-fillCard(me,m.me);
-fillCard(qz,m.qz);
+fillCard(me,m.me,"宁宁");
+fillCard(qz,m.qz,"清泽");
 me.onclick=function(){pickMood(key,"me");};
 qz.onclick=function(){pickMood(key,"qz");};
 const box=document.getElementById("moods");
