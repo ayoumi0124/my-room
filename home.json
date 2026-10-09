@@ -1,0 +1,18 @@
+{
+  "updated": "2026-10-09 13:35",
+  "rooms": [
+    { "id": "living", "name": "客厅" },
+    { "id": "study", "name": "书房" },
+    { "id": "kitchen", "name": "厨房" },
+    { "id": "garden", "name": "花园" }
+  ],
+  "qingze": {
+    "at": "garden",
+    "doing": "给薄荷浇水"
+  },
+  "cat": {
+    "at": "garden",
+    "doing": "趴在花丛边晒太阳"
+  },
+  "note": "今天的花卖了个好价"
+}
