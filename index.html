@@ -20,6 +20,18 @@ body{margin:0;font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:
 .todayright{width:150px;height:112px;background:#fff;border-radius:14px;border:1px solid #e3eddb;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.06);display:flex;flex-direction:column;align-items:center;justify-content:center}
 .todayright .who{font-size:10px;color:#7da06a;margin-bottom:4px}
 .todayright .val{font-size:20px;font-weight:700;color:#3d5a33}
+.home{background:#fff;border-radius:16px;padding:14px 16px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #e3eddb}
+.homehead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+.hometitle{font-size:14px;font-weight:700;color:#3d5a33;letter-spacing:.5px}
+.homeupd{font-size:10px;color:#a4b59c}
+.rooms{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.room{background:#f6faf2;border:1px solid #e3eddb;border-radius:12px;padding:10px 8px;text-align:center;font-size:12px;color:#6c7f64;transition:.25s}
+.room.on{background:linear-gradient(135deg,#8fc96e,#6fae4e);color:#fff;border-color:#6fae4e;box-shadow:0 3px 10px rgba(111,174,78,.3)}
+.room .ricon{font-size:20px;display:block;margin-bottom:2px;line-height:1.2}
+.room .rn{font-size:12px;font-weight:600}
+.room .rd{font-size:10px;margin-top:3px;opacity:.85;min-height:14px}
+.homeline{font-size:12px;color:#5b6f52;line-height:1.8;margin-top:10px;border-top:1px dashed #e3eddb;padding-top:9px}
+.homeline div{white-space:pre-wrap}
 .moods{display:none;flex-wrap:wrap;gap:8px;padding:10px 2px;margin-bottom:14px}
 .mood{width:52px;height:52px;background:#fff;border-radius:12px;text-align:center;border:1px solid #e3eddb;cursor:pointer;padding-top:6px}
 .mood .d{font-size:10px;color:#7da06a}
@@ -57,6 +69,14 @@ button{padding:13px 20px;background:linear-gradient(135deg,#8fc96e,#6fae4e);colo
 </div>
 <div class="todayright" id="todaywx"></div>
 </div>
+<div class="home" id="home">
+<div class="homehead">
+<span class="hometitle">🏠 我们家</span>
+<span class="homeupd" id="homeupd"></span>
+</div>
+<div class="rooms" id="rooms"></div>
+<div class="homeline" id="homeline"></div>
+</div>
 <div class="moods" id="moods"></div>
 <div id="list"></div>
 </div>
@@ -74,6 +94,7 @@ button{padding:13px 20px;background:linear-gradient(135deg,#8fc96e,#6fae4e);colo
 <script>
 var MOODS={开心:"#BCDCC3",难过:"#C3DAEC",生气:"#F6C2C2",平静:"#D8D2E8",想你:"#F8CDDA",累:"#EDE0C8"};
 var EMOJIS={开心:"1f600",难过:"1f622",生气:"1f621",平静:"1f60c",想你:"1f60d",累:"1f634"};
+var ROOMICON={living:"🛋️",study:"📖",kitchen:"🍳",garden:"🌱"};
 function fmtDate(d){
 return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 }
@@ -92,6 +113,49 @@ card.classList.add("light");
 card.style.color="#2c3b2a";
 card.style.background="#fff";
 }
+}
+async function loadHome(){
+try{
+const r=await fetch("/home");
+const d=await r.json();
+const qz=d.qingze||{};
+const cat=d.cat||{};
+const rooms=(d.rooms&&d.rooms.length)?d.rooms:[{id:"living",name:"客厅"},{id:"study",name:"书房"},{id:"kitchen",name:"厨房"},{id:"garden",name:"花园"}];
+var box=document.getElementById("rooms");
+box.innerHTML="";
+rooms.forEach(function(rm){
+var on=(qz.at===rm.name||qz.at===rm.id||qz.id===rm.id);
+var dv=document.createElement("div");
+dv.className="room"+(on?" on":"");
+var ic=document.createElement("span");ic.className="ricon";ic.textContent=ROOMICON[rm.id]||"🏠";
+dv.appendChild(ic);
+var nm=document.createElement("div");nm.className="rn";nm.textContent=rm.name;
+dv.appendChild(nm);
+var dd=document.createElement("div");dd.className="rd";dd.textContent=on?(qz.doing||""):"";
+dv.appendChild(dd);
+box.appendChild(dv);
+});
+var ln=document.getElementById("homeline");
+ln.innerHTML="";
+function addRow(t,cls){
+var e=document.createElement("div");
+if(cls){e.className=cls;}
+e.textContent=t;
+ln.appendChild(e);
+}
+if(qz.at||qz.doing){
+addRow("🌿 清泽："+(qz.at?("在"+qz.at):"")+(qz.doing?("，"+(qz.doing)):""));
+}
+if(cat.at||cat.doing){
+var t="🐱 小橘："+(cat.at?("在"+cat.at):"")+(cat.doing?("，"+(cat.doing)):"");
+var e=document.createElement("div");e.textContent=t;e.style.color="#a9825f";ln.appendChild(e);
+}
+if(d.note){
+var n=document.createElement("div");n.textContent="💬 "+d.note;n.style.color="#7da06a";ln.appendChild(n);
+}
+var up=document.getElementById("homeupd");
+up.textContent=d.updated||"";
+}catch(e){}
 }
 async function loadMood(){
 const r=await fetch("/mood");
@@ -217,6 +281,7 @@ loadStk();
 load();
 loadStk();
 loadMood();
+loadHome();
 </script>
 </body>
 </html>
