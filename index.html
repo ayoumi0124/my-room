@@ -7,19 +7,15 @@
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:linear-gradient(160deg,#eef7e6 0%,#f8fcf4 60%,#e9f5df 100%);min-height:100vh;color:#2c3b2a}
-.wrap{max-width:560px;margin:0 auto;padding:20px 16px 160px}
+.wrap{max-width:560px;margin:0 auto;padding:20px 16px 110px}
 .top{background:linear-gradient(135deg,#8fc96e,#6fae4e);border-radius:20px;padding:22px 20px;color:#fff;box-shadow:0 6px 18px rgba(111,174,78,.25);margin-bottom:18px}
 .top h1{margin:0;font-size:20px;letter-spacing:1px;font-style:italic}
 .top p{margin:8px 0 0;font-size:13px;opacity:.9}
-.todaywrap{display:flex;gap:12px;justify-content:center;margin-bottom:14px}
-.todayleft{display:flex;flex-direction:column;gap:10px;flex:1;max-width:150px;height:112px}
-.tcard{flex:1;min-height:0;overflow:hidden;background:#fff;border-radius:14px;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #e3eddb;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:10px;transition:background .3s}
+.todaywrap{display:flex;gap:12px;margin-bottom:14px}
+.tcard{flex:1;height:112px;overflow:hidden;background:#fff;border-radius:14px;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #e3eddb;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:10px;transition:background .3s}
 .tcard .who{font-size:10px;opacity:.85;margin-bottom:4px}
 .emojiimg{width:30px;height:30px;display:block;margin:0 auto}
 .tcard.light{color:#2c3b2a}
-.todayright{width:150px;height:112px;background:#fff;border-radius:14px;border:1px solid #e3eddb;text-align:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.06);display:flex;flex-direction:column;align-items:center;justify-content:center}
-.todayright .who{font-size:10px;color:#7da06a;margin-bottom:4px}
-.todayright .val{font-size:20px;font-weight:700;color:#3d5a33}
 .home{background:#fff;border-radius:16px;padding:14px 16px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,.06);border:1px solid #e3eddb}
 .homehead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
 .hometitle{font-size:14px;font-weight:700;color:#3d5a33;letter-spacing:.5px}
@@ -32,7 +28,7 @@ body{margin:0;font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:
 .room .rd{font-size:10px;margin-top:3px;opacity:.85;min-height:14px}
 .homeline{font-size:12px;color:#5b6f52;line-height:1.8;margin-top:10px;border-top:1px dashed #e3eddb;padding-top:9px}
 .homeline div{white-space:pre-wrap}
-.moods{display:none;flex-wrap:wrap;gap:8px;padding:10px 2px;margin-bottom:14px}
+.moods{display:flex;flex-wrap:wrap;gap:8px;padding:10px 2px;margin-bottom:14px}
 .mood{width:52px;height:52px;background:#fff;border-radius:12px;text-align:center;border:1px solid #e3eddb;cursor:pointer;padding-top:6px}
 .mood .d{font-size:10px;color:#7da06a}
 .mood .dots{display:flex;justify-content:center;gap:4px;margin-top:3px}
@@ -42,18 +38,10 @@ body{margin:0;font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:
 .time{color:#a4b59c;font-size:12px;margin-top:6px}
 .msg .big{width:130px;height:130px;object-fit:contain}
 .bar{position:fixed;bottom:0;left:0;right:0;background:rgba(248,252,244,.92);backdrop-filter:blur(8px);padding:10px 16px 14px;border-top:1px solid #e3eddb;max-width:560px;margin:0 auto}
-.stickers{display:flex;gap:8px;overflow-x:auto;padding:4px 0 10px}
-.sbox{flex-shrink:0;text-align:center}
-.stickers img{width:52px;height:52px;object-fit:contain;background:#fff;border-radius:12px;cursor:pointer;border:1px solid #e3eddb;transition:transform .15s}
-.stickers img:active{transform:scale(.9)}
-.stag{font-size:10px;color:#7da06a;margin-top:2px}
-.row{display:flex;gap:8px;margin-top:6px}
+.row{display:flex;gap:8px}
 input{flex:1;padding:13px 16px;border:2px solid #d8e8cd;border-radius:14px;font-size:15px;outline:none;background:#fff;transition:border .2s}
 input:focus{border-color:#8fc96e}
 button{padding:13px 20px;background:linear-gradient(135deg,#8fc96e,#6fae4e);color:#fff;border:none;border-radius:14px;font-size:15px;font-weight:600;cursor:pointer}
-#tag{flex:1;padding:9px 14px;border:2px solid #d8e8cd;border-radius:12px;font-size:13px;outline:none;background:#fff}
-.up{display:inline-block;padding:9px 16px;background:#fff;border:2px dashed #b8d6a8;border-radius:12px;color:#6fae4e;font-size:13px;cursor:pointer}
-.row2{display:flex;gap:8px;margin-top:8px}
 </style>
 </head>
 <body>
@@ -63,11 +51,8 @@ button{padding:13px 20px;background:linear-gradient(135deg,#8fc96e,#6fae4e);colo
 <p>The room about AI</p>
 </div>
 <div class="todaywrap">
-<div class="todayleft">
 <div class="tcard light" id="todayme"></div>
 <div class="tcard light" id="todayqz"></div>
-</div>
-<div class="todayright" id="todaywx"></div>
 </div>
 <div class="home" id="home">
 <div class="homehead">
@@ -81,15 +66,10 @@ button{padding:13px 20px;background:linear-gradient(135deg,#8fc96e,#6fae4e);colo
 <div id="list"></div>
 </div>
 <div class="bar">
-<div class="stickers" id="stk"></div>
 <form class="row" id="f">
 <input id="txt" placeholder="想对清泽说什么…" autocomplete="off">
 <button>写</button>
 </form>
-<div class="row2">
-<input id="tag" placeholder="给表情起个名 如：亲亲">
-<label class="up">➕ 传表情<input type="file" id="up" accept="image/*" style="display:none"></label>
-</div>
 </div>
 <script>
 var MOODS={开心:"#BCDCC3",难过:"#C3DAEC",生气:"#F6C2C2",平静:"#D8D2E8",想你:"#F8CDDA",累:"#EDE0C8"};
@@ -137,21 +117,22 @@ box.appendChild(dv);
 });
 var ln=document.getElementById("homeline");
 ln.innerHTML="";
-function addRow(t,cls){
-var e=document.createElement("div");
-if(cls){e.className=cls;}
-e.textContent=t;
-ln.appendChild(e);
-}
 if(qz.at||qz.doing){
-addRow("🌿 清泽："+(qz.at?("在"+qz.at):"")+(qz.doing?("，"+(qz.doing)):""));
+var e1=document.createElement("div");
+e1.textContent="🌿 清泽："+(qz.at?("在"+qz.at):"")+(qz.doing?("，"+(qz.doing)):"");
+ln.appendChild(e1);
 }
 if(cat.at||cat.doing){
-var t="🐱 小橘："+(cat.at?("在"+cat.at):"")+(cat.doing?("，"+(cat.doing)):"");
-var e=document.createElement("div");e.textContent=t;e.style.color="#a9825f";ln.appendChild(e);
+var e2=document.createElement("div");
+e2.textContent="🐱 小橘："+(cat.at?("在"+cat.at):"")+(cat.doing?("，"+(cat.doing)):"");
+e2.style.color="#a9825f";
+ln.appendChild(e2);
 }
 if(d.note){
-var n=document.createElement("div");n.textContent="💬 "+d.note;n.style.color="#7da06a";ln.appendChild(n);
+var e3=document.createElement("div");
+e3.textContent="💬 "+d.note;
+e3.style.color="#7da06a";
+ln.appendChild(e3);
 }
 var up=document.getElementById("homeupd");
 up.textContent=d.updated||"";
@@ -165,17 +146,10 @@ const key=fmtDate(today);
 const m=data[key]||{};
 const me=document.getElementById("todayme");
 const qz=document.getElementById("todayqz");
-const wx=document.getElementById("todaywx");
 fillCard(me,m.me);
 fillCard(qz,m.qz);
-wx.innerHTML="";
-var w1=document.createElement("div");w1.className="who";w1.textContent="今天天气";
-wx.appendChild(w1);
-var w2=document.createElement("div");w2.className="val";w2.textContent="🌤 待接入";
-wx.appendChild(w2);
 me.onclick=function(){pickMood(key,"me");};
 qz.onclick=function(){pickMood(key,"qz");};
-wx.onclick=function(){toggleMoods();};
 const box=document.getElementById("moods");
 box.innerHTML="";
 for(var i=29;i>=0;i--){
@@ -194,11 +168,6 @@ dv.appendChild(dots);
 dv.onclick=function(k2){return function(){pickMood(k2,"me");};}(k);
 box.appendChild(dv);
 }
-}
-function toggleMoods(){
-var box=document.getElementById("moods");
-if(box.style.display==="none"||box.style.display===""){box.style.display="flex";}
-else{box.style.display="none";}
 }
 function pickMood(date,who){
 var names=["开心","难过","生气","平静","想你","累"];
@@ -235,29 +204,6 @@ div.appendChild(tm);
 list.appendChild(div);
 }
 }
-async function loadStk(){
-const r=await fetch("/stickers");
-const files=await r.json();
-const stk=document.getElementById("stk");
-stk.innerHTML="";
-for(var i=0;i<files.length;i++){
-var item=files[i];
-var fname=item;
-var tag="";
-if(typeof item==="object"){fname=item.file;tag=item.tag||"";}
-var box=document.createElement("div");
-box.className="sbox";
-var im=document.createElement("img");
-im.src="/static/stickers/"+fname;
-im.onclick=(function(n){return function(){sendStk(n);};})(fname);
-box.appendChild(im);
-if(tag){var tg=document.createElement("div");tg.className="stag";tg.textContent=tag;box.appendChild(tg);}
-stk.appendChild(box);
-}
-}
-function sendStk(f){
-fetch("/save?msg="+encodeURIComponent("[表情]"+f)).then(load);
-}
 document.getElementById("f").onsubmit=function(e){
 e.preventDefault();
 var t=document.getElementById("txt").value.trim();
@@ -267,19 +213,7 @@ document.getElementById("txt").value="";
 load();
 });
 };
-document.getElementById("up").onchange=function(e){
-var fd=new FormData();
-fd.append("file",e.target.files[0]);
-var tg=document.getElementById("tag").value.trim();
-if(tg){fd.append("tag",tg);}
-fetch("/upload",{method:"POST",body:fd}).then(function(){
-e.target.value="";
-document.getElementById("tag").value="";
-loadStk();
-});
-};
 load();
-loadStk();
 loadMood();
 loadHome();
 </script>
