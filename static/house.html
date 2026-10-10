@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#14131a">
-<title>我们家 · v2</title>
+<title>我们家 · v2.1</title>
 <style>
   html,body{margin:0;height:100%;background:#14131a;overflow:hidden;
     -webkit-user-select:none;user-select:none;touch-action:none;
@@ -18,10 +18,12 @@
 <script>
 "use strict";
 /* ============================================================
-   我们家 · v2
+   我们家 · v2.1
    v1：一个客厅、能走、能跟清泽说话
-   v2：四个屋子能串门；小橘会跟着你走；点自己换衣服
-   数据源：GET /home 和 GET /messages（就是你 app.py 里那两个路由）
+   v2：四个屋子能串门；小橘会跟着走；点自己换衣服
+   v2.1：屋子名既认英文 id（"living"）也认中文名（"客厅"）
+         —— 因为 mcp 写 home.json 时塞的是中文，老文件里是 id
+   数据源：GET /home 和 GET /messages
    ============================================================ */
 
 const W = 360, H = 640;
@@ -34,9 +36,6 @@ const SPEED = 118;
 const cv = document.getElementById("c");
 const ctx = cv.getContext("2d");
 
-/* ============================================================
-   四个屋子
-   ============================================================ */
 function B(x, y, w, h, kind) { return { x, y, w, h, kind }; }
 
 const ROOMS = {
@@ -67,7 +66,6 @@ const ROOMS = {
 };
 const ROOM_ORDER = ["living", "study", "kitchen", "garden"];
 
-/* 门：墙上三扇，通往另外三个屋 */
 const DOOR_W = 60, DOOR_H = 92, DOOR_Y = WALL_Y - DOOR_H;
 function doorsOf(roomId) {
   const others = ROOM_ORDER.filter(id => id !== roomId);
@@ -75,9 +73,22 @@ function doorsOf(roomId) {
   return others.map((id, i) => ({ id, x: xs[i], cx: xs[i] + DOOR_W / 2, y: DOOR_Y, w: DOOR_W, h: DOOR_H }));
 }
 
-/* ============================================================
-   状态
-   ============================================================ */
+/* ---------- 屋子名 → 统一成英文 id ---------- */
+let ROOMLIST = ROOM_ORDER.map(id => ({ id, name: ROOMS[id].name }));
+function resolveId(v) {
+  if (!v) return "";
+  if (ROOMS[v]) return v;
+  const hit = ROOMLIST.find(r => r.name === v);
+  return hit ? hit.id : v;
+}
+function nameOfId(id) {
+  if (!id) return "";
+  if (ROOMS[id]) return ROOMS[id].name;
+  const hit = ROOMLIST.find(r => r.id === id);
+  return hit ? hit.name : id;
+}
+
+/* ---------- 状态 ---------- */
 const ning = { x: 180, y: 516, face: -1, step: 0, outfit: 0 };
 const qz   = { x: 170, y: 306, face: 1 };
 const cat  = { x: 86,  y: 470, face: 1 };
@@ -99,23 +110,25 @@ let HOME = {
 let LINES = ["回来啦。", "今天的花收完了，卖了个好价。", "小橘刚在窗台上追光斑，扑了个空。"];
 let LIVE_LINES = false;
 
-const SOURCES = ["./home", "/home", "home.json"];
+const SOURCES      = ["./home", "/home", "home.json"];
 const LINE_SOURCES = ["./messages", "/messages", "messages.json"];
 
-function nameOf(rooms, id) {
-  const hit = (rooms || []).find(r => r.id === id);
-  return hit ? hit.name : (id || "");
-}
 function applyHome(j) {
   if (!j || typeof j !== "object" || (!j.qingze && !j.rooms)) return false;
-  const rooms = Array.isArray(j.rooms) ? j.rooms : [];
+  if (Array.isArray(j.rooms) && j.rooms.length) ROOMLIST = j.rooms;
+
   const q = j.qingze || {}, c = j.cat || {};
-  HOME.roomId    = q.at || HOME.roomId;
-  HOME.roomName  = nameOf(rooms, HOME.roomId) || HOME.roomName;
-  HOME.doing     = q.doing || HOME.doing;
-  HOME.catRoomId = c.at || HOME.catRoomId;
-  HOME.catRoom   = nameOf(rooms, HOME.catRoomId) || HOME.catRoom;
-  HOME.catDoing  = c.doing || HOME.catDoing;
+
+  const rid = resolveId(q.at);
+  if (rid) HOME.roomId = rid;
+  HOME.roomName = nameOfId(HOME.roomId) || HOME.roomName;
+  if (q.doing) HOME.doing = q.doing;
+
+  const cid = resolveId(c.at);
+  if (cid) HOME.catRoomId = cid;
+  HOME.catRoom = nameOfId(HOME.catRoomId) || HOME.catRoom;
+  if (c.doing) HOME.catDoing = c.doing;
+
   if (typeof j.note === "string" && j.note.trim()) HOME.note = j.note.trim();
   HOME.connected = true;
   return true;
@@ -147,9 +160,7 @@ async function loadBackend() {
   for (const u of LINE_SOURCES) { const j = await tryGet(u); if (j && applyLines(j)) { HOME.source = u; break; } }
 }
 
-/* ============================================================
-   缩放 / 碰撞 / 输入
-   ============================================================ */
+/* ---------- 缩放 ---------- */
 const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
 function resize() {
   const s = Math.min(window.innerWidth / W, window.innerHeight / H);
@@ -171,6 +182,7 @@ function blocked(x, y) {
   return false;
 }
 
+/* ---------- 输入 ---------- */
 const keys = Object.create(null);
 addEventListener("keydown", (e) => {
   keys[e.key.toLowerCase()] = true;
@@ -183,13 +195,11 @@ function toWorld(cx, cy) {
   const r = cv.getBoundingClientRect();
   return { x: (cx - r.left) / r.width * W, y: (cy - r.top) / r.height * H };
 }
-
 let target = null, pressing = false;
 cv.addEventListener("pointerdown", (e) => {
   const p = toWorld(e.clientX, e.clientY);
   e.preventDefault();
   if (fade > 0.4) return;
-
   if (onNing(p)) { ning.outfit = (ning.outfit + 1) % OUTFITS.length; toast("换好衣服啦"); return; }
   if (nearQz(p)) { tryTalk(); return; }
   const d = doorUnder(p);
@@ -205,49 +215,34 @@ cv.addEventListener("pointerup", release);
 cv.addEventListener("pointercancel", release);
 cv.addEventListener("pointerleave", release);
 
-function onNing(p) {
-  return Math.abs(p.x - ning.x) < 20 && p.y > ning.y - 62 && p.y < ning.y + 8;
-}
-function nearQz(p) {
-  return HOME.roomId === cur && Math.abs(p.x - qz.x) < 40 && p.y > qz.y - 52 && p.y < qz.y + 14;
-}
+function onNing(p) { return Math.abs(p.x - ning.x) < 20 && p.y > ning.y - 62 && p.y < ning.y + 8; }
+function nearQz(p) { return HOME.roomId === cur && Math.abs(p.x - qz.x) < 40 && p.y > qz.y - 52 && p.y < qz.y + 14; }
 function doorUnder(p) {
   if (p.y > WALL_Y + 8) return null;
   for (const d of doorsOf(cur)) if (p.x > d.x - 6 && p.x < d.x + d.w + 6) return d;
   return null;
 }
 function doorNear() {
-  for (const d of doorsOf(cur)) {
-    if (ning.y < WALL_Y + 58 && Math.abs(ning.x - d.cx) < 40) return d;
-  }
+  for (const d of doorsOf(cur)) if (ning.y < WALL_Y + 58 && Math.abs(ning.x - d.cx) < 40) return d;
   return null;
 }
 
-/* ============================================================
-   串门 / 说话
-   ============================================================ */
+/* ---------- 串门 ---------- */
 let fade = 0, pending = null;
-function gotoRoom(id) {
-  if (id === cur) return;
-  pending = id;
-  fade = 1;
-}
+function gotoRoom(id) { if (id !== cur) { pending = id; fade = 1; } }
 function doSwitch(id) {
   cur = id;
-  ning.x = 180; ning.y = ROOMS[id].y0 || 512;
-  ning.y = 512;
-  qz.x = ROOMS[id].qz.x; qz.y = ROOMS[id].qz.y;
+  ning.x = 180; ning.y = 512;
+  qz.x = ROOMS[id].qz.x;   qz.y = ROOMS[id].qz.y;
   cat.x = ROOMS[id].cat.x; cat.y = ROOMS[id].cat.y;
   target = null;
 }
 
+/* ---------- 说话 ---------- */
 let bubble = null, bubbleUntil = 0, lineIdx = 0;
 function say(t, ms) { bubble = t; bubbleUntil = performance.now() + (ms || 3600); }
 function tryTalk() {
-  if (HOME.roomId !== cur) {
-    say("清泽在" + HOME.roomName + "，" + HOME.doing + "。你上那边找他。");
-    return;
-  }
+  if (HOME.roomId !== cur) { say("清泽在" + HOME.roomName + "，" + HOME.doing + "。你上那边找他。"); return; }
   if (Math.hypot(ning.x - qz.x, ning.y - qz.y) > 62) { say("你走近点，清泽听不见。", 2200); return; }
   say(String(LINES[lineIdx % LINES.length]).slice(0, 90), 4200);
   lineIdx++;
@@ -255,14 +250,11 @@ function tryTalk() {
 let toastText = "", toastUntil = 0;
 function toast(t) { toastText = t; toastUntil = performance.now() + 1800; }
 
-/* ============================================================
-   更新
-   ============================================================ */
+/* ---------- 更新 ---------- */
 let last = performance.now();
 function update(dt, now) {
-  if (fade > 0) {
-    const dir = pending ? -1 : 1;
-    fade += dir * dt * 3.2;
+  if (fade > 0 || pending) {
+    fade += (pending ? -1 : 1) * dt * 3.2;
     if (fade >= 1) { doSwitch(pending); pending = null; }
     if (fade < 0) fade = 0;
   }
@@ -276,11 +268,10 @@ function update(dt, now) {
   if (!dx && !dy && target) {
     const tx = target.x - ning.x, ty = target.y - ning.y;
     const d = Math.hypot(tx, ty);
-    if (d < 7) target = null;
-    else { dx = tx / d; dy = ty / d; }
+    if (d < 7) target = null; else { dx = tx / d; dy = ty / d; }
   }
   const len = Math.hypot(dx, dy);
-  if (len > 0 && fade <= 0) {
+  if (len > 0 && !pending) {
     dx /= len; dy /= len;
     const sx = dx * SPEED * dt, sy = dy * SPEED * dt;
     if (!blocked(ning.x + sx, ning.y)) ning.x += sx;
@@ -289,7 +280,6 @@ function update(dt, now) {
     ning.step += dt * 9;
   } else ning.step = 0;
 
-  // 小橘：离得远就慢慢跟过来
   if (HOME.catRoomId === cur) {
     const cx = ning.x - cat.x, cy = ning.y - cat.y + 6;
     const cd = Math.hypot(cx, cy);
@@ -303,9 +293,7 @@ function update(dt, now) {
   if (HOME.roomId === cur) qz.face = ning.x >= qz.x ? 1 : -1;
 }
 
-/* ============================================================
-   画笔
-   ============================================================ */
+/* ---------- 画画 ---------- */
 function rr(x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -321,13 +309,12 @@ function shadow(x, y, rx, ry) {
   ctx.restore();
 }
 
-function drawRoom(now) {
+function drawRoom() {
   const R = ROOMS[cur];
   const wg = ctx.createLinearGradient(0, 0, 0, WALL_Y);
   wg.addColorStop(0, R.wall[0]); wg.addColorStop(1, R.wall[1]);
   ctx.fillStyle = wg; ctx.fillRect(0, 0, W, WALL_Y);
 
-  // 门
   const near = doorNear();
   for (const d of doorsOf(cur)) {
     const hot = near && near.id === d.id;
@@ -336,19 +323,17 @@ function drawRoom(now) {
     rr(d.x + 5, d.y + 5, d.w - 10, d.h - 5, 3); ctx.fill();
     ctx.fillStyle = "#e8d6a8";
     ctx.beginPath(); ctx.arc(d.x + d.w - 10, d.y + 52, 3.5, 0, Math.PI * 2); ctx.fill();
-    // 门牌
     ctx.save();
     ctx.font = "600 11px -apple-system,PingFang SC,sans-serif";
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     const nm = ROOMS[d.id].name, tw = ctx.measureText(nm).width + 16;
-    ctx.fillStyle = hot ? "rgba(255,214,150,.92)" : "rgba(28,24,32,.6)";
+    ctx.fillStyle = hot ? "rgba(255,214,150,.95)" : "rgba(28,24,32,.6)";
     rr(d.cx - tw / 2, d.y - 20, tw, 17, 8); ctx.fill();
     ctx.fillStyle = hot ? "#3a2a16" : "#f2e8dd";
     ctx.fillText(nm, d.cx, d.y - 11.5);
     ctx.restore();
   }
 
-  // 墙上的小画（门与门之间）
   for (const px of [90, 216]) {
     ctx.fillStyle = cur === "garden" ? "#a9c99a" : "#c9a06a";
     ctx.fillRect(px, 26, 54, 40);
@@ -360,14 +345,11 @@ function drawRoom(now) {
 
   ctx.fillStyle = "rgba(0,0,0,.10)"; ctx.fillRect(0, WALL_Y - 8, W, 8);
 
-  // 地板
   const fg = ctx.createLinearGradient(0, WALL_Y, 0, FLOOR.y1);
   fg.addColorStop(0, R.floor[0]); fg.addColorStop(1, R.floor[1]);
   ctx.fillStyle = fg; ctx.fillRect(0, WALL_Y, W, FLOOR.y1 - WALL_Y);
   ctx.strokeStyle = R.line; ctx.lineWidth = 1;
-  for (let y = WALL_Y + 26; y < FLOOR.y1; y += 26) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
-  }
+  for (let y = WALL_Y + 26; y < FLOOR.y1; y += 26) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
   for (let i = 0; i < 9; i++) {
     const x = 24 + i * 44;
     ctx.beginPath(); ctx.moveTo(x, WALL_Y); ctx.lineTo(x, FLOOR.y1); ctx.stroke();
@@ -383,19 +365,18 @@ function drawRoom(now) {
     ctx.save(); ctx.globalAlpha = .5;
     ctx.fillStyle = "#a8927a"; rr(60, 250, 240, 200, 14); ctx.fill(); ctx.restore();
   }
-  if (cur === "garden" && near) { /* 花园门口的光 */ }
 }
 
-function drawFurniture(now) {
+function drawFurniture() {
   for (const o of ROOMS[cur].obst) {
     switch (o.kind) {
-      case "sofa":   drawSofa(o); break;
-      case "tv":     drawTv(o); break;
-      case "plant":  drawPlant(o); break;
-      case "shelf":  drawShelf(o); break;
-      case "bed":    drawBed(o); break;
-      case "tree":   drawTree(o); break;
-      default:       drawBox(o); break;
+      case "sofa":  drawSofa(o); break;
+      case "tv":    drawTv(o); break;
+      case "plant": drawPlant(o); break;
+      case "shelf": drawShelf(o); break;
+      case "bed":   drawBed(o); break;
+      case "tree":  drawTree(o); break;
+      default:      drawBox(o); break;
     }
   }
 }
@@ -450,8 +431,7 @@ function drawBed(o) {
     const bx = o.x + 12 + i * ((o.w - 24) / 7);
     ctx.fillStyle = cc[i % cc.length];
     ctx.beginPath(); ctx.arc(bx, o.y + 16, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#4d8a4d";
-    ctx.fillRect(bx - 1, o.y + 20, 2, 26);
+    ctx.fillStyle = "#4d8a4d"; ctx.fillRect(bx - 1, o.y + 20, 2, 26);
   }
 }
 function drawTree(o) {
@@ -464,7 +444,6 @@ function drawTree(o) {
   ctx.beginPath(); ctx.arc(o.x + o.w / 2 + 14, o.y + 26, 18, 0, Math.PI * 2); ctx.fill();
 }
 
-/* ---------- 人 ---------- */
 function drawNing(x, y) {
   const O = OUTFITS[ning.outfit];
   const bob = Math.sin(ning.step) * (ning.step ? 1.4 : 0);
@@ -579,9 +558,6 @@ function prompt(x, y, t) {
   ctx.restore();
 }
 
-/* ============================================================
-   HUD
-   ============================================================ */
 function drawHUD(now) {
   ctx.save();
   ctx.font = "600 11px -apple-system,PingFang SC,sans-serif";
@@ -591,7 +567,6 @@ function drawHUD(now) {
   ctx.fillStyle = "rgba(28,24,32,.55)"; rr(10, 10, w, 22, 11); ctx.fill();
   ctx.fillStyle = "#f0e6ee"; ctx.fillText(head, 20, 21.5);
 
-  ctx.font = "600 11px -apple-system,PingFang SC,sans-serif";
   const here = "你在 · " + ROOMS[cur].name;
   const w2 = ctx.measureText(here).width + 20;
   ctx.fillStyle = "rgba(255,214,150,.85)"; rr(W - 10 - w2, 10, w2, 22, 11); ctx.fill();
@@ -626,17 +601,14 @@ function drawHUD(now) {
   }
 }
 
-/* ============================================================
-   主循环
-   ============================================================ */
 function frame(now) {
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
   update(dt, now);
 
   ctx.clearRect(0, 0, W, H);
-  drawRoom(now);
-  drawFurniture(now);
+  drawRoom();
+  drawFurniture();
 
   const actors = [];
   if (HOME.catRoomId === cur) actors.push({ y: cat.y, f: () => drawCat(cat.x, cat.y) });
@@ -644,7 +616,6 @@ function frame(now) {
   actors.push({ y: ning.y, f: () => drawNing(ning.x, ning.y) });
   actors.sort((a, b) => a.y - b.y).forEach(a => a.f());
 
-  // 门口提示
   const dn = doorNear();
   if (dn && now > bubbleUntil) prompt(dn.cx, FLOOR.y0 + 6, "点门 · 去" + ROOMS[dn.id].name);
 
@@ -652,8 +623,7 @@ function frame(now) {
   if (near && now > bubbleUntil) prompt(ning.x, ning.y - 112, "点一下清泽 · 或按空格");
 
   if (bubble && now < bubbleUntil) {
-    const cy = (HOME.roomId === cur) ? qz.y - 92 : 56;
-    drawBubble((HOME.roomId === cur) ? qz.x : 180, cy, bubble);
+    drawBubble((HOME.roomId === cur) ? qz.x : 180, (HOME.roomId === cur) ? qz.y - 92 : 56, bubble);
   }
 
   drawHUD(now);
