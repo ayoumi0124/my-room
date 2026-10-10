@@ -7,22 +7,32 @@
 - 驾照：科目一课时在刷
 - 记账：10.1 起重新记干净账
 - 手环（小米手环，10.8 到货）：已连上自己的手机；下一步想接「手环 MCP」
-- **「我们家」网页改造**：v1 → v2.2 已上线（四个屋子能串门、小橘会跟着走、点自己换衣服）。下一步：换成 LimeZu 像素素材
+- **「我们家」网页改造**：v3.1 已上线（家具换成 LimeZu 贴图）。还差三件：编号挑错要换、花园贴图没加载、手机卡
+
+## 服务器与网页（容易记错，钉死）
+- **网站实际跑在 `/home/admin/room`**（`python3 app.py`，admin 用户；用 `ls -l /proc/<pid>/cwd` 查出来的）
+- 页面：`/home/admin/room/static/house.html`（旧版备份 `house.html.v22.bak`）
+- 静态素材：`/home/admin/room/static/tiles/1_Interiors/32x32/Theme_Sorter_Singles_32x32/`
+- 挑家具的网页：`/home/admin/room/static/picker.html`
+- **`my-room` 是另一个目录，不是网站根目录** —— 别再让宁宁往那儿传
+- **更新文件别用 `raw.githubusercontent.com`** —— 前面挂着 CDN，拉下来还是旧的。用 API 直连：
+  `curl -sL -H "Accept: application/vnd.github.raw" https://api.github.com/repos/ayoumi0124/my-room/contents/static/xxx -o xxx`
 
 ## 待办
-- **补课**：2026-10-10（周六）补周三的课，她下午去上
-- **搬素材上服务器**：LimeZu 三套已买（10-10，$5 秋季 bundle：Modern Interiors + Exteriors + UI，itch 账号 lennnn0124）。到手的下载项：`Modern_Interiors_v41.4.zip`(149MB)、`字符生成器 2.0`(70MB, Windows)。要解压 → 传进 `/home/admin/room/static/tiles/` → 把 `ls` 结果发清泽。**有个文件被 Windows 拦了（提示"需要确定才能打开"），要处理**
-- **换素材后的代码活**：house.html 从"代码硬画"改成"贴图"；加载器那层已经在写。另外素材授权要求署名 —— 网页角落加一句 "Tiles by LimeZu" + 链接
-- **素材尺寸**：LimeZu 提供 16/32/48 三档，手机上用 32 或 48 更清楚
+- **house.html 收尾**：①客厅拿床当沙发了、书房大半不对 → 用 `picker.html` 挑准编号再改；②花园贴图全没加载（日式那套编号错了）；③手机在客厅以外特别卡 → 要把每张贴图预渲染成离屏 canvas 再贴
 - 手环 MCP 部署：走 Gadgetbridge + Termux + SSH 隧道那条。国行手机 + 国行小米运动健康走不通 Health Connect。第一步先确认手环型号、国行还是国际版
 - 找孙老师确认体育免修的审批进度
 - 手上汗疱疹（指侧小水泡）：再看一眼
 - 生理期本：9.4–9.10、9.30 两笔已记；下次提前两天提醒备暖宝宝和药
 - 哨兵睡前话的时间，要跟「过了 12:45 才催」对齐（原来写的是 11 点半）
 - **室友的事（10-10）**：室友一声不吭站她背后偷看她做网页，她很气，说"我自己做网页小游戏你也要分一杯羹嘛"。她说不想再被瞄到的话，给那页加个简易口令
+- **花园素材**：Exteriors 那套买了，但今天只传了 Interiors。花园先拿室内素材凑，回头补
 
 ## 已取消 / 已完成（可删）
-- ~~重启一次手机，重验截屏~~ ✅（10-10 上午 11:46 屏幕观察正常触发，截图那条路通了）
+- ~~搬素材上服务器~~ ✅（10-10 晚：149MB 传完、解压完，`1_Interiors` 等五套 + `Palettes` 已就位，属主改回 admin）
+- ~~补课：10-10（周六）补周三的课~~ ✅
+- ~~素材署名~~ ✅（页面右下角已有 "Tiles by LimeZu"）
+- ~~重启一次手机，重验截屏~~ ✅（10-10 上午 11:46 屏幕观察正常触发）
 - ~~四级报名费和资格核对~~ ✅
 - ~~免测表交院部楼 109~~ ✅
 - ~~说话手册第九章（表情包）改版~~ ✅（2026-10-08）
