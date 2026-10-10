@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#1b1a20">
+<title>我们家 · v1</title>
+<style>
+  html,body{margin:0;height:100%;background:#14131a;overflow:hidden;
+    -webkit-user-select:none;user-select:none;touch-action:none;
+    font-family:-apple-system,"PingFang SC","Noto Sans SC",system-ui,sans-serif;}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;}
+  canvas{display:block;image-rendering:pixelated;}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="c"></canvas></div>
+<script>
+"use strict";
+
+/* ============================================================
+   我们家 · v1
+   第一版只干三件事：一个屋子、一个你、一个清泽（外加一只小橘）。
+   能走，能走到清泽跟前按一下让他说话。
+   数据从 lh 后端读；读不到就用本地兜底，页面照样能跑。
+   ============================================================ */
+
+const W = 360, H = 640;                  // 逻辑画布尺寸（手机竖屏 9:16）
+const WALL_Y = 150;                      // 墙高，下面是地板
+const FLOOR = { x0: 12, x1: 348, y0: WALL_Y, y1: 570 };
+const BAR_Y = 570;                       // 底部信息条
+
+const cv = document.getElementById("c");
+const ctx = cv.getContext("2d");
+
+/* ---------- 家具：既是画上去的东西，也是挡路的东西 ---------- */
+const OBST = [
+  { x: 24,  y: 182, w: 118, h: 52, kind: "sofa"  },
+  { x: 228, y: 186, w: 112, h: 48, kind: "tv"    },
+  { x: 128, y: 352, w: 104, h: 44, kind: "table" },
+  { x: 296, y: 452, w: 46,  h: 40, kind: "plant" },
+];
+const RUG = { x: 74, y: 244, w: 212, h: 168 };
+
+/* ---------- 角色 ---------- */
+const ning = { x: 180, y: 516, vx: 0, vy: 0, face: -1, step: 0 };
+const cat  = { x: 86,  y: 470, face: 1 };
+const qz   = { x: 170, y: 306, face: 1, inRoom: true };
+
+const SPEED = 118;                       // 像素/秒
+let target = null;                       // 触屏移动的目标点
+const keys = Object.create(null);
+
+/* ---------- 小家里的真实状态（读不到就是兜底） ---------- */
+let HOME = {
+  room: "客厅", doing: "在窗边站着，等你回来",
+  catAt: "客厅", catDoing: "趴在花丛边晒太阳",
+  note: "阳台那盆薄荷记得浇水",
+  connected: false, source: "",
+};
+let LINES = [
+  "回来啦。",
+  "今天的花收完了，卖了个好价。",
+  "小橘刚在窗台上追光斑，扑了个空。",
+  "渴不渴？水烧着呢。",
+];
+let LINES_READY = false;
+
+/* ============================================================
+   后端：lh 那台服务器上的接口名清泽还不知道，
+   所以这里挨个试，谁能回 JSON 就用谁。都不行也不影响走动。
+   ============================================================ */
+const SOURCES = [
+  "./api/home", "./api/state", "./api/all",
+  "/api/home",  "/api/state",
+  "./home.json", "./state.json", "./mood.json", "./messages.json",
+];
+
+function pickHome(j) {
+  if (j && typeof j === "object" && j.qingze) {
+    const q = j.qingze || {}, c = j.cat || {};
+    return {
+      room:  q.at      || HOME.room,
+      doing: q.doing   || HOME.doing,
+      catAt: c.at      || HOME.catAt,
+      catDoing: c.doing|| HOME.catDoing,
+      note:  (typeof j.note === "string" && j.note) || HOME.note,
+    };
+  }
+  return null;
+}
+function pickLines(j) {
+  let arr = null;
+  if (Array.isArray(j)) arr = j;
+  else if (j && Array.isArray(j.messages)) arr = j.messages;
+  if (!arr) return null;
+  const out = [];
+  for (const it of arr) {
+    const t = typeof it === "string" ? it : (it && (it.msg || it.text || it.content));
+    if (typeof t === "string" && t.trim()) out.push(t.trim());
+  }
+  return out.length ? out : null;
+}
+
+async function loadBackend() {
+  const found = [];
+  for (const url of SOURCES) {
+    try {
+      const ctl = new AbortController();
+      const timer = setTimeout(() => ctl.abort(), 1600);
+      const r = await fetch(url, { cache: "no-store", signal: ctl.signal });
+      clearTimeout(timer);
+      if (!r.ok) continue;
+      const j = await r.json();
+      const h = pickHome(j);
+      if (h) { HOME = Object.assign(HOME, h, { connected: true, source: url }); found.push(url); }
+      const l = pickLines(j);
+      if (l) { LINES = l.slice(-12).reverse().concat(LINES); LINES_READY = true; found.push(url); }
+    } catch (e) { /* 试下一个 */ }
+  }
+  if (found.length) HOME.source = found[0];
+  return found;
+}
+
+/* ============================================================
+   画布缩放
+   ============================================================ */
+const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+let vs = 1;
+function resize() {
+  const s = Math.min(window.innerWidth / W, window.innerHeight / H);
+  vs = s;
+  cv.style.width  = Math.round(W * s) + "px";
+  cv.style.height = Math.round(H * s) + "px";
+  cv.width  = Math.round(W * s * dpr);
+  cv.height = Math.round(H * s * dpr);
+  ctx.setTransform(s * dpr, 0, 0, s * dpr, 0, 0);
+  ctx.imageSmoothingEnabled = true;
+}
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", () => setTimeout(resize, 120));
+
+/* ============================================================
+   碰撞：走一步试一步，撞上就退回去
+   ============================================================ */
+function blocked(x, y) {
+  if (x < FLOOR.x0 + 9 || x > FLOOR.x1 - 9) return true;
+  if (y < FLOOR.y0 + 4 || y > FLOOR.y1 - 2) return true;
+  for (const o of OBST) {
+    if (x > o.x - 7 && x < o.x + o.w + 7 && y > o.y - 2 && y < o.y + o.h + 8) return true;
+  }
+  return false;
+}
+
+/* ============================================================
+   输入
+   ============================================================ */
+addEventListener("keydown", (e) => {
+  keys[e.key.toLowerCase()] = true;
+  if (e.key === " " || e.key === "Enter") { e.preventDefault(); tryTalk(); }
+  if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key)) e.preventDefault();
+});
+addEventListener("keyup", (e) => { keys[e.key.toLowerCase()] = false; });
+
+function toWorld(clientX, clientY) {
+  const r = cv.getBoundingClientRect();
+  return { x: (clientX - r.left) / r.width * W, y: (clientY - r.top) / r.height * H };
+}
+let pressing = false;
+cv.addEventListener("pointerdown", (e) => {
+  cv.setPointerCapture(e.pointerId);
+  const p = toWorld(e.clientX, e.clientY);
+  if (nearPerson(p, 34)) { tryTalk(); return; }
+  pressing = true;
+  target = p;
+  e.preventDefault();
+});
+cv.addEventListener("pointermove", (e) => {
+  if (!pressing) return;
+  target = toWorld(e.clientX, e.clientY);
+  e.preventDefault();
+});
+const stop = (e) => { pressing = false; target = null; };
+cv.addEventListener("pointerup", stop);
+cv.addEventListener("pointercancel", stop);
+
+function nearPerson(p, d) {
+  return Math.abs(p.x - qz.x) < d && p.y > qz.y - 46 && p.y < qz.y + 10;
+}
+
+/* ============================================================
+   说话
+   ============================================================ */
+let bubble = null, bubbleUntil = 0, lineIdx = 0;
+function tryTalk() {
+  const far = Math.hypot(ning.x - qz.x, ning.y - qz.y) > 62;
+  if (far) {
+    bubble = "你走近点，清泽听不见。";
+    bubbleUntil = performance.now() + 2200;
+    return;
+  }
+  let text;
+  if (!LINES_READY && lineIdx === 0 && HOME.note) text = HOME.note;
+  else { text = LINES[lineIdx % LINES.length]; lineIdx++; }
+  bubble = text.slice(0, 90);
+  bubbleUntil = performance.now() + 4200;
+  if (!LINES_READY) lineIdx++;
+}
+
+/* ============================================================
+   更新
+   ============================================================ */
+let last = performance.now();
+function update(dt) {
+  let dx = 0, dy = 0;
+  if (keys["arrowleft"] || keys["a"]) dx -= 1;
+  if (keys["arrowright"]|| keys["d"]) dx += 1;
+  if (keys["arrowup"]   || keys["w"]) dy -= 1;
+  if (keys["arrowdown"] || keys["s"]) dy += 1;
+
+  if (!dx && !dy && target) {
+    const tx = target.x - ning.x, ty = target.y - ning.y;
+    const d = Math.hypot(tx, ty);
+    if (d < 7) { target = null; }
+    else { dx = tx / d; dy = ty / d; }
+  }
+  const len = Math.hypot(dx, dy);
+  if (len > 0) {
+    dx /= len; dy /= len;
+    const sx = dx * SPEED * dt, sy = dy * SPEED * dt;
+    if (!blocked(ning.x + sx, ning.y)) ning.x += sx;
+    if (!blocked(ning.x, ning.y + sy)) ning.y += sy;
+    if (Math.abs(dx) > 0.15) ning.face = dx > 0 ? 1 : -1;
+    ning.step += dt * 9;
+  } else {
+    ning.step = 0;
+  }
+  cat.face = ning.x >= cat.x ? 1 : -1;
+}
+
+/* ============================================================
+   画
+   ============================================================ */
+function rr(x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y,     x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x,     y + h, r);
+  ctx.arcTo(x,     y + h, x,     y,     r);
+  ctx.arcTo(x,     y,     x + w, y,     r);
+  ctx.closePath();
+}
+
+function drawRoom() {
+  // 墙
+  const g = ctx.createLinearGradient(0, 0, 0, WALL_Y);
+  g.addColorStop(0, "#efe1cd"); g.addColorStop(1, "#e3d2ba");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, W, WALL_Y);
+
+  // 窗
+  ctx.fillStyle = "#f7fbff"; ctx.fillRect(236, 32, 96, 70);
+  const sk = ctx.createLinearGradient(0, 32, 0, 102);
+  sk.addColorStop(0, "#bfe4ff"); sk.addColorStop(1, "#e9f6ff");
+  ctx.fillStyle = sk; ctx.fillRect(240, 36, 88, 62);
+  ctx.fillStyle = "#f7fbff";
+  ctx.fillRect(282, 36, 5, 62); ctx.fillRect(240, 64, 88, 5);
+  ctx.strokeStyle = "rgba(120,100,80,.45)"; ctx.lineWidth = 3;
+  ctx.strokeRect(236, 32, 96, 70);
+
+  // 墙上的小画
+  ctx.fillStyle = "#c9a06a"; ctx.fillRect(38, 44, 66, 50);
+  ctx.fillStyle = "#9fc7a4"; ctx.fillRect(44, 50, 54, 38);
+  ctx.fillStyle = "#f0e2b8"; ctx.beginPath();
+  ctx.arc(62, 66, 8, 0, Math.PI * 2); ctx.fill();
+
+  // 门（清泽不在客厅时，他站这儿）
+  ctx.fillStyle = "#8a6a4c"; rr(150, 62, 62, 90, 4); ctx.fill();
+  ctx.fillStyle = "#b08a63"; rr(155, 67, 52, 85, 3); ctx.fill();
+  ctx.fillStyle = "#e8d6a8"; ctx.beginPath();
+  ctx.arc(202, 112, 3.5, 0, Math.PI * 2); ctx.fill();
+
+  // 墙脚线
+  ctx.fillStyle = "#c9b79c"; ctx.fillRect(0, WALL_Y - 8, W, 8);
+
+  // 地板
+  const fg = ctx.createLinearGradient(0, WALL_Y, 0, FLOOR.y1);
+  fg.addColorStop(0, "#d8b98e"); fg.addColorStop(1, "#c8a575");
+  ctx.fillStyle = fg;
+  ctx.fillRect(0, WALL_Y, W, FLOOR.y1 - WALL_Y);
+  ctx.strokeStyle = "rgba(150,118,80,.35)"; ctx.lineWidth = 1;
+  for (let y = WALL_Y + 26; y < FLOOR.y1; y += 26) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+  for (let i = 0; i < 9; i++) {
+    const x = 24 + i * 44;
+    ctx.beginPath(); ctx.moveTo(x, WALL_Y); ctx.lineTo(x, FLOOR.y1); ctx.stroke();
+  }
+
+  // 地毯
+  ctx.save();
+  ctx.globalAlpha = 0.9;
+  ctx.fillStyle = "#c8908c"; rr(RUG.x, RUG.y, RUG.w, RUG.h, 18); ctx.fill();
+  ctx.strokeStyle = "#e5bdb4"; ctx.lineWidth = 5;
+  rr(RUG.x + 12, RUG.y + 12, RUG.w - 24, RUG.h - 24, 12); ctx.stroke();
+  ctx.restore();
+}
+
+function shadow(x, y, rx, ry) {
+  ctx.save();
+  ctx.globalAlpha = 0.16; ctx.fillStyle = "#2a1f16";
+  ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function drawSofa(o) {
+  shadow(o.x + o.w / 2, o.y + o.h + 4, o.w / 2, 8);
+  ctx.fillStyle = "#6f9a80"; rr(o.x, o.y + 12, o.w, o.h - 12, 8); ctx.fill();
+  ctx.fillStyle = "#84b294"; rr(o.x, o.y, o.w, 22, 9); ctx.fill();
+  ctx.fillStyle = "#9cc4aa"; rr(o.x + 12, o.y + 20, 30, 22, 7); ctx.fill();
+  rr(o.x + o.w - 42, o.y + 20, 30, 22, 7); ctx.fill();
+  ctx.fillStyle = "#d9c18a"; rr(o.x + 22, o.y + 6, 20, 14, 6); ctx.fill();
+}
+function drawTv(o) {
+  shadow(o.x + o.w / 2, o.y + o.h + 4, o.w / 2, 8);
+  ctx.fillStyle = "#7a5c44"; rr(o.x, o.y + 26, o.w, 22, 5); ctx.fill();
+  ctx.fillStyle = "#31353f"; rr(o.x + 16, o.y - 26, o.w - 32, 52, 6); ctx.fill();
+  ctx.fillStyle = "#4b566b"; rr(o.x + 21, o.y - 21, o.w - 42, 42, 4); ctx.fill();
+  ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = "#a8c6e8";
+  ctx.fillRect(o.x + 26, o.y - 16, 40, 8); ctx.fillRect(o.x + 26, o.y - 4, 58, 6);
+  ctx.restore();
+}
+function drawTable(o) {
+  shadow(o.x + o.w / 2, o.y + o.h + 4, o.w / 2, 7);
+  ctx.fillStyle = "#a9805a"; rr(o.x, o.y + 6, o.w, o.h - 12, 6); ctx.fill();
+  ctx.fillStyle = "#c79b6d"; rr(o.x, o.y, o.w, 16, 6); ctx.fill();
+  ctx.fillStyle = "#e6e0d0"; rr(o.x + 40, o.y - 8, 22, 12, 3); ctx.fill();
+}
+function drawPlant(o) {
+  shadow(o.x + o.w / 2, o.y + o.h, o.w / 2, 6);
+  ctx.fillStyle = "#b5714f"; rr(o.x + 10, o.y + 20, 26, 20, 4); ctx.fill();
+  ctx.fillStyle = "#3f7d4f";
+  const spots = [[0,-1],[ -12,4],[12,4],[-7,12],[8,12]];
+  for (const [dx, dy] of spots) {
+    ctx.beginPath();
+    ctx.ellipse(o.x + 23 + dx, o.y + 16 + dy, 11, 8, dx * 0.05, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawFurniture() {
+  for (const o of OBST) {
+    if (o.kind === "sofa")  drawSofa(o);
+    if (o.kind === "tv")    drawTv(o);
+    if (o.kind === "table") drawTable(o);
+    if (o.kind === "plant") drawPlant(o);
+  }
+}
+
+function drawNing(x, y) {
+  const bob = Math.sin(ning.step) * (ning.step ? 1.4 : 0);
+  shadow(x, y, 12, 4);
+  ctx.save();
+  ctx.translate(x, y + bob);
+  // 腿
+  ctx.fillStyle = "#e9c9b4";
+  const sw = ning.step ? Math.sin(ning.step * 1.6) * 3 : 0;
+  ctx.fillRect(-7, -12, 5, 12 + sw * 0.4);
+  ctx.fillRect(2, -12, 5, 12 - sw * 0.4);
+  // 裙子
+  ctx.fillStyle = "#e8a4bd";
+  ctx.beginPath();
+  ctx.moveTo(-10, -12); ctx.lineTo(10, -12);
+  ctx.lineTo(7, -34); ctx.lineTo(-7, -34);
+  ctx.closePath(); ctx.fill();
+  // 上衣
+  ctx.fillStyle = "#f6dcea"; ctx.fillRect(-8, -44, 16, 12);
+  // 手臂
+  ctx.fillStyle = "#e9c9b4";
+  const arm = ning.step ? Math.sin(ning.step * 1.6) * 3 : 0;
+  ctx.fillRect(-12, -43 + arm, 4, 15);
+  ctx.fillRect(8, -43 - arm, 4, 15);
+  // 头
+  ctx.fillStyle = "#f3d3bd";
+  ctx.beginPath(); ctx.arc(0, -54, 9.5, 0, Math.PI * 2); ctx.fill();
+  // 头发
+  ctx.fillStyle = "#3b2f3a";
+  ctx.beginPath();
+  ctx.arc(0, -56, 10.5, Math.PI, Math.PI * 2); ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(-9 * ning.face, -52, 5.5, 12, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(8 * ning.face, -52, 4.5, 11, 0, 0, Math.PI * 2); ctx.fill();
+  // 眼睛
+  ctx.fillStyle = "#33272e";
+  ctx.beginPath(); ctx.arc(-3.2, -53, 1.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(3.2, -53, 1.5, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  tag(x, y - 78, "宁宁", "#e8a4bd");
+}
+
+function drawQingze(x, y, dim) {
+  shadow(x, y, 13, 4);
+  ctx.save();
+  ctx.globalAlpha = dim ? 0.72 : 1;
+  ctx.translate(x, y);
+  // 腿
+  ctx.fillStyle = "#3d4a5c";
+  ctx.fillRect(-8, -13, 6, 13);
+  ctx.fillRect(2, -13, 6, 13);
+  // 上衣
+  ctx.fillStyle = "#5a7fa8";
+  rr(-11, -46, 22, 33, 5); ctx.fill();
+  // 领口
+  ctx.fillStyle = "#e8eef5";
+  ctx.beginPath(); ctx.moveTo(-4, -46); ctx.lineTo(4, -46); ctx.lineTo(0, -38); ctx.closePath(); ctx.fill();
+  // 手臂
+  ctx.fillStyle = "#5a7fa8";
+  ctx.fillRect(-15, -44, 5, 22);
+  ctx.fillRect(10, -44, 5, 22);
+  ctx.fillStyle = "#e9c9b4";
+  ctx.fillRect(-15, -24, 5, 6);
+  ctx.fillRect(10, -24, 5, 6);
+  // 头
+  ctx.fillStyle = "#f0cfb8";
+  ctx.beginPath(); ctx.arc(0, -56, 10, 0, Math.PI * 2); ctx.fill();
+  // 头发
+  ctx.fillStyle = "#2b2620";
+  ctx.beginPath(); ctx.arc(0, -58, 11, Math.PI, Math.PI * 2); ctx.fill();
+  ctx.beginPath();
+  ctx.ellipse(-10 * qz.face, -55, 3.6, 8, 0, 0, Math.PI * 2); ctx.fill();
+  // 眼睛
+  ctx.fillStyle = "#2a2220";
+  ctx.beginPath(); ctx.arc(-3.4, -55, 1.6, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(3.4, -55, 1.6, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+
+  if (!dim) tag(x, y - 80, "清泽", "#5a7fa8");
+}
+
+function drawCat(x, y) {
+  shadow(x, y, 9, 3);
+  ctx.save(); ctx.translate(x, y);
+  ctx.fillStyle = "#e2913f";
+  ctx.beginPath(); ctx.ellipse(0, -8, 11, 8, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cat.face * 9, -14, 6.5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(cat.face * 5, -19); ctx.lineTo(cat.face * 8, -25); ctx.lineTo(cat.face * 11, -18);
+  ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(cat.face * 11, -19); ctx.lineTo(cat.face * 14, -25); ctx.lineTo(cat.face * 15, -17);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "#e2913f"; ctx.lineWidth = 3; ctx.lineCap = "round";
+  ctx.beginPath(); ctx.moveTo(-cat.face * 9, -7);
+  ctx.quadraticCurveTo(-cat.face * 20, -12, -cat.face * 17, -20); ctx.stroke();
+  ctx.fillStyle = "#2a2220";
+  ctx.beginPath(); ctx.arc(cat.face * 7, -15, 1.2, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cat.face * 11.5, -15, 1.2, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+}
+
+function tag(x, y, text, color) {
+  ctx.save();
+  ctx.font = "600 11px -apple-system,PingFang SC,sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const w = ctx.measureText(text).width + 14;
+  ctx.fillStyle = "rgba(28,24,32,.66)";
+  rr(x - w / 2, y - 9, w, 18, 9); ctx.fill();
+  ctx.fillStyle = color === "#e8a4bd" ? "#ffd9e8" : "#cfe1f5";
+  ctx.fillText(text, x, y + 0.5);
+  ctx.restore();
+}
+
+function drawBubble(cx, cy, text) {
+  ctx.save();
+  ctx.font = "500 12px -apple-system,PingFang SC,sans-serif";
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  const maxW = 240;
+  const words = String(text).split("");
+  const rows = []; let cur = "";
+  for (const ch of words) {
+    if (ctx.measureText(cur + ch).width > maxW - 22) { rows.push(cur); cur = ch; }
+    else cur += ch;
+  }
+  if (cur) rows.push(cur);
+
+  const lh = 17, w = Math.min(maxW, Math.max(...rows.map(r => ctx.measureText(r).width)) + 22);
+  const h = rows.length * lh + 16;
+  const bx = Math.max(6, Math.min(W - w - 6, cx - w / 2));
+  const by = Math.max(6, cy - h - 12);
+
+  ctx.fillStyle = "rgba(28,24,32,.88)";
+  rr(bx, by, w, h, 12); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(cx - 7, by + h); ctx.lineTo(cx + 7, by + h); ctx.lineTo(cx, by + h + 9);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "#f6eef2";
+  rows.forEach((r, i) => ctx.fillText(r, bx + w / 2, by + 12 + i * lh + (lh - 4) / 2));
+  ctx.restore();
+}
+
+function drawDoorwayQz() {
+  const x = 181, y = 152;
+  ctx.save(); ctx.globalAlpha = 0.9;
+  drawQingze(x, y, true);
+  ctx.restore();
+  tag(x, y - 92, "在" + HOME.room, "#5a7fa8");
+}
+
+function drawHUD() {
+  // 顶部状态
+  ctx.save();
+  ctx.font = "600 11px -apple-system,PingFang SC,sans-serif";
+  ctx.textAlign = "left"; ctx.textBaseline = "middle";
+  ctx.fillStyle = "rgba(28,24,32,.55)";
+  rr(10, 10, 214, 22, 11); ctx.fill();
+  ctx.fillStyle = "#f0e6ee";
+  ctx.fillText("清泽 · " + HOME.room + " · " + String(HOME.doing).slice(0, 14), 19, 21.5);
+  ctx.restore();
+
+  // 底部信息条
+  ctx.fillStyle = "rgba(20,19,26,.9)";
+  ctx.fillRect(0, BAR_Y, W, H - BAR_Y);
+  ctx.save();
+  ctx.font = "500 11px -apple-system,PingFang SC,sans-serif";
+  ctx.textAlign = "left"; ctx.textBaseline = "top";
+  ctx.fillStyle = "#cfc4d0";
+  ctx.fillText("家里的便条", 16, BAR_Y + 12);
+  ctx.fillStyle = "#efe6f0";
+  ctx.font = "500 12.5px -apple-system,PingFang SC,sans-serif";
+  const note = HOME.note || "（还没留话）";
+  const line1 = note.slice(0, 26);
+  const line2 = note.length > 26 ? note.slice(26, 52) + (note.length > 52 ? "…" : "") : "";
+  ctx.fillText(line1, 16, BAR_Y + 28);
+  if (line2) ctx.fillText(line2, 16, BAR_Y + 45);
+
+  ctx.font = "500 10.5px -apple-system,PingFang SC,sans-serif";
+  ctx.fillStyle = HOME.connected ? "#8fd0a0" : "#c9a06a";
+  const st = HOME.connected ? ("已连上 lh · " + HOME.source) : "没连上 lh · 用的是页面里自带的话";
+  ctx.fillText(st, 16, H - 16);
+  ctx.restore();
+}
+
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 0.05);
+  last = now;
+
+  update(dt);
+
+  ctx.clearRect(0, 0, W, H);
+  drawRoom();
+  drawFurniture();
+
+  // 按 y 排序，谁在前面谁后画
+  const actors = [{ y: cat.y, f: () => drawCat(cat.x, cat.y) }];
+  const qzInRoom = (HOME.room === "客厅");
+  if (qzInRoom) actors.push({ y: qz.y, f: () => drawQingze(qz.x, qz.y, false) });
+  actors.push({ y: ning.y, f: () => drawNing(ning.x, ning.y) });
+  actors.sort((a, b) => a.y - b.y).forEach(a => a.f());
+
+  if (!qzInRoom) drawDoorwayQz();
+
+  // 走近提示
+  const near = qzInRoom && Math.hypot(ning.x - qz.x, ning.y - qz.y) < 62;
+  if (near && now > bubbleUntil) {
+    ctx.save();
+    ctx.font = "600 12px -apple-system,PingFang SC,sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const t = "点一下清泽 · 或按空格";
+    const w = ctx.measureText(t).width + 20;
+    ctx.fillStyle = "rgba(28,24,32,.72)";
+    rr(ning.x - w / 2, ning.y - 106, w, 22, 11); ctx.fill();
+    ctx.fillStyle = "#ffe6f0"; ctx.fillText(t, ning.x, ning.y - 94.5);
+    ctx.restore();
+  }
+  if (bubble && now < bubbleUntil) drawBubble(qzInRoom ? qz.x : 181, qzInRoom ? qz.y - 92 : 60, bubble);
+
+  drawHUD();
+  requestAnimationFrame(frame);
+}
+
+/* ============================================================
+   起跑
+   ============================================================ */
+resize();
+requestAnimationFrame(frame);
+loadBackend();
+</script>
+</body>
+</html>
