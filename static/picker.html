@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>挑家具 · picker</title>
+<style>
+  :root{--bg:#14131a;--card:#1e1c26;--line:#2e2b38;--ink:#e8e2ee;--dim:#9d94a6;--hot:#ffd696}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.5 -apple-system,"PingFang SC","Noto Sans SC",system-ui,sans-serif;
+    -webkit-text-size-adjust:100%}
+  header{position:sticky;top:0;z-index:5;background:rgba(20,19,26,.96);
+    border-bottom:1px solid var(--line);padding:10px 12px}
+  h1{margin:0 0 8px;font-size:15px;font-weight:600}
+  h1 small{color:var(--dim);font-weight:400;font-size:12px;margin-left:6px}
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  select,button{font:inherit;background:var(--card);color:var(--ink);
+    border:1px solid var(--line);border-radius:8px;padding:7px 10px}
+  button:active{background:#2a2733}
+  button.pri{background:#3a4a63;border-color:#4a5f80}
+  .hint{color:var(--dim);font-size:12px;margin-top:6px}
+  .grid{display:grid;gap:6px;padding:10px;
+    grid-template-columns:repeat(auto-fill,minmax(84px,1fr))}
+  .cell{background:var(--card);border:1px solid var(--line);border-radius:8px;
+    padding:6px 4px 4px;text-align:center;cursor:pointer;user-select:none}
+  .cell.on{border-color:var(--hot);background:#2b2530}
+  .cell img{image-rendering:pixelated;width:64px;height:64px;
+    object-fit:contain;display:block;margin:0 auto 4px;pointer-events:none}
+  .cell b{display:block;font-size:11px;color:var(--dim);font-weight:500}
+  .cell.on b{color:var(--hot)}
+  .bar{position:fixed;left:0;right:0;bottom:0;background:rgba(20,19,26,.97);
+    border-top:1px solid var(--line);padding:10px 12px}
+  textarea{width:100%;height:74px;background:#11101a;color:#b8f0c0;
+    border:1px solid var(--line);border-radius:8px;padding:8px;
+    font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;resize:vertical}
+  .pad{padding-bottom:170px}
+  .cnt{color:var(--hot);font-weight:600}
+</style>
+</head>
+<body>
+<header>
+  <h1>挑家具 <small>点一下选中，底下会攒出清单</small></h1>
+  <div class="row">
+    <select id="theme"></select>
+    <button id="clear">清空</button>
+  </div>
+  <div class="hint">选中的是 <span class="cnt" id="n">0</span> 件。挑完照着底下那串念给清泽，或者复制走。</div>
+</header>
+
+<div class="grid pad" id="grid"></div>
+
+<div class="bar">
+  <textarea id="out" readonly placeholder="选中的家具会出现在这里"></textarea>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   挑家具 · picker
+   把 Theme_Sorter_Singles_32x32 里的单件铺成网格，点选攒清单
+   素材：Tiles by LimeZu — https://limezu.itch.io/
+   ============================================================ */
+
+const BASE = "tiles/1_Interiors/32x32/Theme_Sorter_Singles_32x32/";
+
+/* key 是给 house.html 用的短名；max 是碰运气的编号上限，扫不到就跳过 */
+const THEMES = [
+  { key:"living",    label:"客厅 Living",       dir:"2_Living_Room_Singles_32x32",                    pre:"Living_Room_Singles_32x32_",                    max:200 },
+  { key:"bedroom",   label:"卧室 Bedroom",      dir:"4_Bedroom_Singles_32x32",                        pre:"Bedroom_Singles_32x32_",                        max:600 },
+  { key:"kitchen",   label:"厨房 Kitchen",      dir:"12_Kitchen_Singles_32x32",                       pre:"Kitchen_Singles_32x32_",                        max:450 },
+  { key:"classroom", label:"书房/教室 Library", dir:"5_Classroom_and_Library_Singles_32x32",          pre:"Classroom_and_Library_Singles_32x32_",          max:300 },
+  { key:"japanese",  label:"日式 Japanese",     dir:"20_Japanese_Interiors_Singles_32x32",            pre:"Japanese_Interiors_32x32_",                     max:200 },
+  { key:"bathroom",  label:"浴室 Bathroom",     dir:"3_Bathroom_Singles_32x32",                       pre:"Bathroom_Singles_32x32_",                       max:200 },
+  { key:"party",     label:"派对 Party",        dir:"10_Birthday_Party_Singles_32x32",                pre:"Birthday_Party_Singles_32x32_",                 max:200 },
+  { key:"tv",        label:"影视棚 TV Studio",  dir:"23_Television_and_Film_Studio_SIngles_32x32",    pre:"Television_and_Film_Studio_Singles_32x32_",     max:120 },
+  { key:"condo",     label:"公寓 Condominium",  dir:"26_Condominium_Singles_32x32",                   pre:"Condominium_Singles_32x32_",                    max:120 },
+  { key:"clothing",  label:"服装店 Clothes",    dir:"21_Clothing_Store_Singles_32x32",                pre:"Clothing_Store_Singles_32x32_",                 max:400 },
+  { key:"halloween", label:"万圣节 Halloween",  dir:"11_Halloween_Singles_32x32",                     pre:"Halloween_Singles_32x32_",                      max:150 },
+  { key:"christmas", label:"圣诞 Christmas",    dir:"15_Christmas_Singles_32x32",                     pre:"Christmas_Singles_32x32_",                      max:200 }
+];
+
+const sel = document.getElementById("theme");
+const grid = document.getElementById("grid");
+const out = document.getElementById("out");
+const nEl = document.getElementById("n");
+
+const picked = [];   // [{key, dir, pre, n}]
+
+THEMES.forEach((t, i) => {
+  const o = document.createElement("option");
+  o.value = String(i); o.textContent = t.label;
+  sel.appendChild(o);
+});
+
+/* ---------- 扫描一套：_1 到 max，加载失败的自动跳过 ---------- */
+let scanToken = 0;
+function scan(idx) {
+  const T = THEMES[idx];
+  const my = ++scanToken;
+  grid.innerHTML = "";
+  const found = [];
+
+  let n = 1;
+  function step() {
+    if (my !== scanToken) return;
+    if (n > T.max) { done(); return; }
+    const url = BASE + T.dir + "/" + T.pre + n + ".png";
+    const im = new Image();
+    im.onload  = () => { add(n, url, im.naturalWidth, im.naturalHeight); n++; step(); };
+    im.onerror = () => { n++; step(); };
+    im.src = url;
+  }
+
+  function add(num, url, iw, ih) {
+    found.push({ num, url, iw, ih });
+    const d = document.createElement("div");
+    d.className = "cell";
+    d.dataset.num = String(num);
+    const gi = document.createElement("img");
+    gi.src = url; gi.loading = "lazy";
+    const b = document.createElement("b");
+    b.textContent = num + (iw && ih ? "  " + iw + "×" + ih : "");
+    d.appendChild(gi); d.appendChild(b);
+    d.addEventListener("click", () => toggle(T, num, d));
+    grid.appendChild(d);
+  }
+
+  /* 如果连着 120 个都没命中，就当扫完了 */
+  let miss = 0;
+  const rawStep = step;
+  function stepWrapped() {
+    if (my !== scanToken) return;
+    rawStep();
+  }
+  step();
+}
+
+function toggle(T, num, cell) {
+  const i = picked.findIndex(p => p.key === T.key && p.n === num);
+  if (i >= 0) { picked.splice(i, 1); cell.classList.remove("on"); }
+  else { picked.push({ key: T.key, dir: T.dir, pre: T.pre, n: num }); cell.classList.add("on"); }
+  render();
+}
+
+function render() {
+  nEl.textContent = String(picked.length);
+  if (!picked.length) { out.value = ""; return; }
+  out.value = picked.map(p => `{ c:"${p.key}", n: ${p.n} }`).join("\n");
+}
+
+document.getElementById("clear").addEventListener("click", () => {
+  picked.length = 0;
+  document.querySelectorAll(".cell.on").forEach(e => e.classList.remove("on"));
+  render();
+});
+
+sel.addEventListener("change", () => scan(Number(sel.value)));
+scan(0);
+</script>
+</body>
+</html>
