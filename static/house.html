@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#14131a">
-<title>我们家 · v2.1</title>
+<title>我们家 · v2.2</title>
 <style>
   html,body{margin:0;height:100%;background:#14131a;overflow:hidden;
     -webkit-user-select:none;user-select:none;touch-action:none;
@@ -18,11 +18,9 @@
 <script>
 "use strict";
 /* ============================================================
-   我们家 · v2.1
-   v1：一个客厅、能走、能跟清泽说话
-   v2：四个屋子能串门；小橘会跟着走；点自己换衣服
-   v2.1：屋子名既认英文 id（"living"）也认中文名（"客厅"）
-         —— 因为 mcp 写 home.json 时塞的是中文，老文件里是 id
+   我们家 · v2.2
+   v2.1：屋子名既认英文 id 也认中文名
+   v2.2：修换屋动画 —— 之前黑屏完了没真的换过去，人还卡住不动了
    数据源：GET /home 和 GET /messages
    ============================================================ */
 
@@ -73,7 +71,6 @@ function doorsOf(roomId) {
   return others.map((id, i) => ({ id, x: xs[i], cx: xs[i] + DOOR_W / 2, y: DOOR_Y, w: DOOR_W, h: DOOR_H }));
 }
 
-/* ---------- 屋子名 → 统一成英文 id ---------- */
 let ROOMLIST = ROOM_ORDER.map(id => ({ id, name: ROOMS[id].name }));
 function resolveId(v) {
   if (!v) return "";
@@ -88,7 +85,6 @@ function nameOfId(id) {
   return hit ? hit.name : id;
 }
 
-/* ---------- 状态 ---------- */
 const ning = { x: 180, y: 516, face: -1, step: 0, outfit: 0 };
 const qz   = { x: 170, y: 306, face: 1 };
 const cat  = { x: 86,  y: 470, face: 1 };
@@ -118,7 +114,6 @@ function applyHome(j) {
   if (Array.isArray(j.rooms) && j.rooms.length) ROOMLIST = j.rooms;
 
   const q = j.qingze || {}, c = j.cat || {};
-
   const rid = resolveId(q.at);
   if (rid) HOME.roomId = rid;
   HOME.roomName = nameOfId(HOME.roomId) || HOME.roomName;
@@ -160,7 +155,6 @@ async function loadBackend() {
   for (const u of LINE_SOURCES) { const j = await tryGet(u); if (j && applyLines(j)) { HOME.source = u; break; } }
 }
 
-/* ---------- 缩放 ---------- */
 const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
 function resize() {
   const s = Math.min(window.innerWidth / W, window.innerHeight / H);
@@ -182,7 +176,17 @@ function blocked(x, y) {
   return false;
 }
 
-/* ---------- 输入 ---------- */
+/* ---------- 换屋：淡出 → 换 → 淡入 ---------- */
+let fade = 0, pending = null;
+function gotoRoom(id) { if (id !== cur && !pending) pending = id; }
+function doSwitch(id) {
+  cur = id;
+  ning.x = 180; ning.y = 512; ning.step = 0;
+  qz.x = ROOMS[id].qz.x;   qz.y = ROOMS[id].qz.y;
+  cat.x = ROOMS[id].cat.x; cat.y = ROOMS[id].cat.y;
+  target = null;
+}
+
 const keys = Object.create(null);
 addEventListener("keydown", (e) => {
   keys[e.key.toLowerCase()] = true;
@@ -199,7 +203,7 @@ let target = null, pressing = false;
 cv.addEventListener("pointerdown", (e) => {
   const p = toWorld(e.clientX, e.clientY);
   e.preventDefault();
-  if (fade > 0.4) return;
+  if (pending) return;
   if (onNing(p)) { ning.outfit = (ning.outfit + 1) % OUTFITS.length; toast("换好衣服啦"); return; }
   if (nearQz(p)) { tryTalk(); return; }
   const d = doorUnder(p);
@@ -215,27 +219,16 @@ cv.addEventListener("pointerup", release);
 cv.addEventListener("pointercancel", release);
 cv.addEventListener("pointerleave", release);
 
-function onNing(p) { return Math.abs(p.x - ning.x) < 20 && p.y > ning.y - 62 && p.y < ning.y + 8; }
+function onNing(p) { return Math.abs(p.x - ning.x) < 22 && p.y > ning.y - 62 && p.y < ning.y + 8; }
 function nearQz(p) { return HOME.roomId === cur && Math.abs(p.x - qz.x) < 40 && p.y > qz.y - 52 && p.y < qz.y + 14; }
 function doorUnder(p) {
-  if (p.y > WALL_Y + 8) return null;
-  for (const d of doorsOf(cur)) if (p.x > d.x - 6 && p.x < d.x + d.w + 6) return d;
+  if (p.y > WALL_Y + 22) return null;
+  for (const d of doorsOf(cur)) if (p.x > d.x - 10 && p.x < d.x + d.w + 10) return d;
   return null;
 }
 function doorNear() {
-  for (const d of doorsOf(cur)) if (ning.y < WALL_Y + 58 && Math.abs(ning.x - d.cx) < 40) return d;
+  for (const d of doorsOf(cur)) if (ning.y < WALL_Y + 62 && Math.abs(ning.x - d.cx) < 42) return d;
   return null;
-}
-
-/* ---------- 串门 ---------- */
-let fade = 0, pending = null;
-function gotoRoom(id) { if (id !== cur) { pending = id; fade = 1; } }
-function doSwitch(id) {
-  cur = id;
-  ning.x = 180; ning.y = 512;
-  qz.x = ROOMS[id].qz.x;   qz.y = ROOMS[id].qz.y;
-  cat.x = ROOMS[id].cat.x; cat.y = ROOMS[id].cat.y;
-  target = null;
 }
 
 /* ---------- 说话 ---------- */
@@ -250,13 +243,13 @@ function tryTalk() {
 let toastText = "", toastUntil = 0;
 function toast(t) { toastText = t; toastUntil = performance.now() + 1800; }
 
-/* ---------- 更新 ---------- */
 let last = performance.now();
-function update(dt, now) {
-  if (fade > 0 || pending) {
-    fade += (pending ? -1 : 1) * dt * 3.2;
+function update(dt) {
+  if (pending) {
+    fade = Math.min(1, fade + dt * 3.6);
     if (fade >= 1) { doSwitch(pending); pending = null; }
-    if (fade < 0) fade = 0;
+  } else if (fade > 0) {
+    fade = Math.max(0, fade - dt * 3.6);
   }
 
   let dx = 0, dy = 0;
@@ -271,7 +264,7 @@ function update(dt, now) {
     if (d < 7) target = null; else { dx = tx / d; dy = ty / d; }
   }
   const len = Math.hypot(dx, dy);
-  if (len > 0 && !pending) {
+  if (len > 0) {
     dx /= len; dy /= len;
     const sx = dx * SPEED * dt, sy = dy * SPEED * dt;
     if (!blocked(ning.x + sx, ning.y)) ning.x += sx;
@@ -293,7 +286,6 @@ function update(dt, now) {
   if (HOME.roomId === cur) qz.face = ning.x >= qz.x ? 1 : -1;
 }
 
-/* ---------- 画画 ---------- */
 function rr(x, y, w, h, r) {
   ctx.beginPath();
   ctx.moveTo(x + r, y);
@@ -604,7 +596,7 @@ function drawHUD(now) {
 function frame(now) {
   const dt = Math.min((now - last) / 1000, 0.05);
   last = now;
-  update(dt, now);
+  update(dt);
 
   ctx.clearRect(0, 0, W, H);
   drawRoom();
@@ -617,13 +609,10 @@ function frame(now) {
   actors.sort((a, b) => a.y - b.y).forEach(a => a.f());
 
   const dn = doorNear();
-  if (dn && now > bubbleUntil) prompt(dn.cx, FLOOR.y0 + 6, "点门 · 去" + ROOMS[dn.id].name);
-
-  const near = HOME.roomId === cur && Math.hypot(ning.x - qz.x, ning.y - qz.y) < 62;
-  if (near && now > bubbleUntil) prompt(ning.x, ning.y - 112, "点一下清泽 · 或按空格");
+  if (dn && !bubble) prompt(dn.cx, WALL_Y + 10, "点门 · 去" + ROOMS[dn.id].name);
 
   if (bubble && now < bubbleUntil) {
-    drawBubble((HOME.roomId === cur) ? qz.x : 180, (HOME.roomId === cur) ? qz.y - 92 : 56, bubble);
+    drawBubble((HOME.roomId === cur) ? qz.x : 180, (HOME.roomId === cur) ? qz.y - 92 : 150, bubble);
   }
 
   drawHUD(now);
