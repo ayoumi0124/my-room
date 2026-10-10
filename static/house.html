@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#14131a">
-<title>我们家 · v3.0</title>
+<title>我们家 · v3.1</title>
 <style>
   html,body{margin:0;height:100%;background:#14131a;overflow:hidden;
     -webkit-user-select:none;user-select:none;touch-action:none;
@@ -18,10 +18,10 @@
 <script>
 "use strict";
 /* ============================================================
-   我们家 · v3.0
-   v2.1：屋子名既认英文 id 也认中文名
-   v2.2：修换屋动画
-   v3.0：家具从「代码硬画」换成贴图（LimeZu Modern Interiors 32x32）
+   我们家 · v3.1
+   v3.0：家具从「代码硬画」换成贴图
+   v3.1：修拉伸 —— 贴图默认按原图比例缩放、底边对齐；
+         只有标了 stretch:true 的（地毯/地板这类）才允许拉
    数据源：GET /home 和 GET /messages
    素材：Tiles by LimeZu — https://limezu.itch.io/
    ============================================================ */
@@ -52,7 +52,7 @@ function img(c, n) {
   let e = IMG[u];
   if (!e) {
     const im = new Image();
-    e = IMG[u] = { el: im, ok: false, tried: true };
+    e = IMG[u] = { el: im, ok: false };
     im.onload  = () => { e.ok = true; };
     im.onerror = () => { e.ok = false; };
     im.src = u;
@@ -66,62 +66,66 @@ ctx.imageSmoothingEnabled = false;
 
 /* ============================================================
    屋子定义
-   furn：要贴的家具。x/y/w/h 是画布坐标，solid=能不能穿过去
-   floorArt：铺在地上的（先画，人走在上面）
+   furn 每件：
+     c/n    哪个主题、哪一号
+     x/y/w  左、上、**显示的宽度**（高度按原图比例自动算，底边贴着 y+h）
+     h      底边参考线（也是碰撞盒的底）
+     stretch:true  才允许拉伸填满 w×h（地毯、地板这种）
+     solid:false   允许穿过去
    ============================================================ */
 const ROOMS = {
   living: {
     name: "客厅", wall: ["#efe1cd", "#e3d2ba"], floor: ["#d8b98e", "#c8a575"],
-    line: "rgba(150,118,80,.35)", qz: { x: 170, y: 306 }, cat: { x: 86, y: 470 },
+    line: "rgba(150,118,80,.35)", qz: { x: 170, y: 316 }, cat: { x: 86, y: 470 },
     floorArt: [
-      { c: "bedroom", n: 383, x: 62, y: 356, w: 236, h: 172 }
+      { c: "bedroom", n: 383, x: 92, y: 392, w: 176, h: 124, stretch: true }
     ],
     furn: [
-      { c: "bedroom",  n: 488, x: 22,  y: 268, w: 130, h: 96 },
-      { c: "bedroom",  n: 504, x: 210, y: 262, w: 128, h: 104 },
-      { c: "japanese", n: 57,  x: 292, y: 448, w: 48,  h: 52 },
-      { c: "japanese", n: 58,  x: 26,  y: 452, w: 48,  h: 52 },
-      { c: "party",    n: 1,   x: 152, y: 404, w: 64,  h: 48 }
+      { c: "bedroom",  n: 43, x: 18,  y: 300, w: 118, h: 74 },
+      { c: "bedroom",  n: 45, x: 224, y: 302, w: 118, h: 74 },
+      { c: "japanese", n: 27, x: 152, y: 452, w: 60,  h: 48 },
+      { c: "japanese", n: 57, x: 298, y: 448, w: 42,  h: 48 },
+      { c: "japanese", n: 58, x: 20,  y: 452, w: 42,  h: 48 }
     ]
   },
   study: {
     name: "书房", wall: ["#e7e1d3", "#d9d1c0"], floor: ["#c9b699", "#b8a37f"],
-    line: "rgba(130,105,70,.35)", qz: { x: 258, y: 330 }, cat: { x: 300, y: 470 },
+    line: "rgba(130,105,70,.35)", qz: { x: 258, y: 336 }, cat: { x: 300, y: 470 },
     floorArt: [
-      { c: "bedroom", n: 385, x: 70, y: 366, w: 220, h: 164 }
+      { c: "bedroom", n: 385, x: 96, y: 392, w: 172, h: 122, stretch: true }
     ],
     furn: [
-      { c: "classroom", n: 100, x: 18,  y: 176, w: 132, h: 122 },
-      { c: "classroom", n: 1,   x: 190, y: 262, w: 138, h: 110 },
-      { c: "classroom", n: 96,  x: 108, y: 396, w: 136, h: 74 },
-      { c: "japanese",  n: 57,  x: 300, y: 448, w: 44,  h: 50 }
+      { c: "classroom", n: 100, x: 16,  y: 288, w: 126, h: 118 },
+      { c: "classroom", n: 1,   x: 200, y: 300, w: 128, h: 108 },
+      { c: "classroom", n: 96,  x: 112, y: 452, w: 128, h: 70 },
+      { c: "japanese",  n: 57,  x: 306, y: 448, w: 40,  h: 48 }
     ]
   },
   kitchen: {
     name: "厨房", wall: ["#e9efd6", "#dbe4c2"], floor: ["#ded5c4", "#cdc2ac"],
-    line: "rgba(140,120,90,.3)", qz: { x: 92, y: 320 }, cat: { x: 300, y: 468 },
+    line: "rgba(140,120,90,.3)", qz: { x: 96, y: 326 }, cat: { x: 300, y: 468 },
     floorArt: [
-      { c: "bedroom", n: 388, x: 66, y: 368, w: 228, h: 162 }
+      { c: "bedroom", n: 388, x: 94, y: 392, w: 176, h: 122, stretch: true }
     ],
     furn: [
-      { c: "kitchen", n: 159, x: 20,  y: 182, w: 62,  h: 126 },
-      { c: "kitchen", n: 122, x: 96,  y: 224, w: 118, h: 84 },
-      { c: "kitchen", n: 219, x: 236, y: 190, w: 108, h: 118 },
-      { c: "kitchen", n: 96,  x: 126, y: 404, w: 110, h: 66 },
-      { c: "kitchen", n: 98,  x: 96,  y: 416, w: 34,  h: 44 },
-      { c: "kitchen", n: 99,  x: 232, y: 416, w: 34,  h: 44 }
+      { c: "kitchen", n: 159, x: 18,  y: 300, w: 58,  h: 130 },
+      { c: "kitchen", n: 122, x: 96,  y: 302, w: 112, h: 82 },
+      { c: "kitchen", n: 219, x: 240, y: 300, w: 104, h: 114 },
+      { c: "kitchen", n: 96,  x: 122, y: 452, w: 104, h: 64 },
+      { c: "kitchen", n: 98,  x: 88,  y: 462, w: 32,  h: 44 },
+      { c: "kitchen", n: 99,  x: 240, y: 462, w: 32,  h: 44 }
     ]
   },
   garden: {
     name: "花园", wall: ["#cfe6c4", "#b0d69e"], floor: ["#95c476", "#7fb262"],
-    line: "rgba(80,130,60,.35)", qz: { x: 180, y: 300 }, cat: { x: 108, y: 440 },
+    line: "rgba(80,130,60,.35)", qz: { x: 180, y: 316 }, cat: { x: 108, y: 440 },
     floorArt: [],
     furn: [
-      { c: "japanese", n: 57, x: 30,  y: 424, w: 58, h: 62 },
-      { c: "japanese", n: 58, x: 268, y: 424, w: 58, h: 62 },
-      { c: "japanese", n: 59, x: 150, y: 400, w: 58, h: 62 },
-      { c: "japanese", n: 54, x: 44,  y: 250, w: 104, h: 88 },
-      { c: "japanese", n: 55, x: 210, y: 250, w: 104, h: 88 }
+      { c: "japanese", n: 54, x: 30,  y: 348, w: 96,  h: 84 },
+      { c: "japanese", n: 55, x: 216, y: 348, w: 96,  h: 84 },
+      { c: "japanese", n: 57, x: 26,  y: 470, w: 46,  h: 54 },
+      { c: "japanese", n: 58, x: 288, y: 470, w: 46,  h: 54 },
+      { c: "japanese", n: 59, x: 150, y: 468, w: 46,  h: 54 }
     ]
   }
 };
@@ -148,7 +152,6 @@ function nameOfId(id) {
   return hit ? hit.name : id;
 }
 
-/* ---------- 碰撞盒：由家具自己长出来 ---------- */
 function solidsOf(id) {
   const f = ROOMS[id].furn || [];
   return f.filter(o => o.solid !== false)
@@ -156,7 +159,7 @@ function solidsOf(id) {
 }
 
 const ning = { x: 180, y: 516, face: -1, step: 0, outfit: 0 };
-const qz   = { x: 170, y: 306, face: 1 };
+const qz   = { x: 170, y: 316, face: 1 };
 const cat  = { x: 86,  y: 470, face: 1 };
 let cur = LIVING_ID;
 
@@ -222,7 +225,6 @@ async function loadBackend() {
   for (const u of LINE_SOURCES) { const j = await tryGet(u); if (j && applyLines(j)) { HOME.source = u; break; } }
 }
 
-/* ---------- 预热贴图 ---------- */
 (function preload() {
   for (const id of ROOM_ORDER) {
     const R = ROOMS[id];
@@ -253,7 +255,6 @@ function blocked(x, y) {
   return false;
 }
 
-/* ---------- 换屋 ---------- */
 let fade = 0, pending = null;
 function gotoRoom(id) { if (id !== cur && !pending) pending = id; }
 function doSwitch(id) {
@@ -308,7 +309,6 @@ function doorNear() {
   return null;
 }
 
-/* ---------- 说话 ---------- */
 let bubble = null, bubbleUntil = 0, lineIdx = 0;
 function say(t, ms) { bubble = t; bubbleUntil = performance.now() + (ms || 3600); }
 function tryTalk() {
@@ -378,19 +378,25 @@ function shadow(x, y, rx, ry) {
   ctx.restore();
 }
 
-/* ---------- 贴图绘制 ---------- */
+/* ---------- 贴图绘制：默认保比例、底边对齐 ---------- */
 function drawTile(o) {
   const e = img(o.c, o.n);
-  if (e.ok) {
-    ctx.drawImage(e.el, o.x, o.y, o.w, o.h);
+  if (!e.ok) return false;
+  const im = e.el;
+  if (o.stretch) {
+    ctx.drawImage(im, o.x, o.y, o.w, o.h);
     return true;
   }
-  return false;
+  const iw = im.naturalWidth  || 32;
+  const ih = im.naturalHeight || 32;
+  const w = o.w;
+  const h = w * ih / iw;
+  ctx.drawImage(im, o.x + (o.w - w) / 2, o.y + o.h - h, w, h);
+  return true;
 }
 function drawGhostFurn(o) {
-  ctx.save(); ctx.globalAlpha = .35;
-  ctx.fillStyle = "#a9805a"; rr(o.x, o.y + 8, o.w, o.h - 8, 6); ctx.fill();
-  ctx.fillStyle = "#c79b6d"; rr(o.x, o.y, o.w, Math.min(o.h, 18), 6); ctx.fill();
+  ctx.save(); ctx.globalAlpha = .3;
+  ctx.fillStyle = "#a9805a"; rr(o.x, o.y, o.w, Math.max(12, o.h * .3), 6); ctx.fill();
   ctx.restore();
 }
 
@@ -444,13 +450,7 @@ function drawRoom() {
 function drawFloorArt() {
   for (const o of (ROOMS[cur].floorArt || [])) drawTile(o);
 }
-function drawFurniture() {
-  for (const o of (ROOMS[cur].furn || [])) {
-    if (!drawTile(o)) drawGhostFurn(o);
-  }
-}
 
-/* ---------- 人 ---------- */
 function drawNing(x, y) {
   const O = OUTFITS[ning.outfit];
   const bob = Math.sin(ning.step) * (ning.step ? 1.4 : 0);
@@ -625,7 +625,7 @@ function frame(now) {
     actors.push({ y: o.y + o.h, f: () => { if (!drawTile(o)) drawGhostFurn(o); } });
   }
   if (HOME.catRoomId === cur) actors.push({ y: cat.y, f: () => drawCat(cat.x, cat.y) });
-  if (HOME.roomId === cur)    actors.push({ y: qz.y,  f: () => drawQingze(qz.x, qz.y) });
+  if (HOME.roomId === cur)    actors.push({ y: qz.y,  f: () => drawQingZzeSafe() });
   actors.push({ y: ning.y, f: () => drawNing(ning.x, ning.y) });
   actors.sort((a, b) => a.y - b.y).forEach(a => a.f());
 
@@ -644,6 +644,7 @@ function frame(now) {
   }
   requestAnimationFrame(frame);
 }
+function drawQingZzeSafe() { drawQingze(qz.x, qz.y); }
 
 resize();
 requestAnimationFrame(frame);
