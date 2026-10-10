@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>摆家 · editor</title>
+<style>
+  :root{--bg:#14131a;--card:#1e1c26;--line:#2e2b38;--ink:#e8e2ee;--dim:#9d94a6;--hot:#ffd696}
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:13px/1.45 -apple-system,"PingFang SC","Noto Sans SC",system-ui,sans-serif;overflow:hidden}
+  header{background:rgba(20,19,26,.96);border-bottom:1px solid var(--line);padding:8px 10px}
+  .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  select,button{font:inherit;background:var(--card);color:var(--ink);
+    border:1px solid var(--line);border-radius:7px;padding:5px 9px}
+  button:active{background:#2a2733}
+  button.hot{background:#3a4a63;border-color:#4a5f80}
+  .wrap{display:flex;height:calc(100% - 92px)}
+  .lib{width:118px;flex:none;overflow-y:auto;border-right:1px solid var(--line);
+    padding:6px;display:grid;grid-template-columns:1fr 1fr;gap:5px;align-content:start}
+  .lib .cell{background:var(--card);border:1px solid var(--line);border-radius:6px;
+    padding:3px;text-align:center;cursor:pointer;user-select:none}
+  .lib .cell:active{border-color:var(--hot)}
+  .lib .cell img{image-rendering:pixelated;width:100%;height:38px;object-fit:contain;display:block;pointer-events:none}
+  .lib .cell b{display:block;font-size:9px;color:var(--dim);font-weight:500;pointer-events:none}
+  .stage{flex:1;display:flex;align-items:center;justify-content:center;background:#0e0d12;overflow:hidden}
+  canvas{display:block;touch-action:none}
+  footer{border-top:1px solid var(--line);padding:6px 10px;display:flex;gap:6px;
+    align-items:center;background:rgba(20,19,26,.96)}
+  textarea{flex:1;height:52px;background:#11101a;color:#b8f0c0;border:1px solid var(--line);
+    border-radius:7px;padding:6px;font:11px/1.4 ui-monospace,Menlo,Consolas,monospace;resize:none}
+  .tip{color:var(--dim);font-size:11px}
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <select id="room"></select>
+    <select id="theme"></select>
+    <button id="del">删掉选中</button>
+    <button id="narrow">◀ 窄</button>
+    <button id="wide">宽 ▶</button>
+    <button id="stretch">平铺开关</button>
+    <button id="back">▼ 后</button>
+    <button id="front">▲ 前</button>
+    <button class="hot" id="copy">复制清单</button>
+  </div>
+  <div class="tip">左边点一下 → 进屋子；拖屋里那件 → 挪位置；点中会亮黄边。</div>
+</header>
+
+<div class="wrap">
+  <div class="lib" id="lib"></div>
+  <div class="stage"><canvas id="c"></canvas></div>
+</div>
+
+<footer>
+  <textarea id="out" readonly placeholder="这间屋子的清单会出现在这里"></textarea>
+</footer>
+
+<script>
+"use strict";
+/* ============================================================
+   摆家 · editor
+   左边图库 → 点进右边屋子 → 拖位置 → 底下出清单
+   坐标跟 house.html 完全一致：x=左, y=顶, w=显示宽, h=到底边的框
+   素材：Tiles by LimeZu — https://limezu.itch.io/
+   ============================================================ */
+
+const W = 360, H = 640, WALL_Y = 150;
+const FLOOR = { x0: 12, x1: 348, y0: WALL_Y, y1: 570 };
+
+const BASE = "tiles/1_Interiors/32x32/Theme_Sorter_Singles_32x32/";
+const THEMES = [
+  { key:"living",    label:"客厅",       dir:"2_Living_Room_Singles_32x32",                 pre:"Living_Room_Singles_32x32_",                 max:200 },
+  { key:"bedroom",   label:"卧室",       dir:"4_Bedroom_Singles_32x32",                     pre:"Bedroom_Singles_32x32_",                     max:600 },
+  { key:"kitchen",   label:"厨房",       dir:"12_Kitchen_Singles_32x32",                    pre:"Kitchen_Singles_32x32_",                     max:450 },
+  { key:"classroom", label:"书房/教室",  dir:"5_Classroom_and_Library_Singles_32x32",       pre:"Classroom_and_Library_Singles_32x32_",       max:300 },
+  { key:"japanese",  label:"日式",       dir:"20_Japanese_Interiors_Singles_32x32",         pre:"Japanese_Interiors_32x32_",                  max:200 },
+  { key:"bathroom",  label:"浴室",       dir:"3_Bathroom_Singles_32x32",                    pre:"Bathroom_Singles_32x32_",                    max:200 },
+  { key:"party",     label:"派对",       dir:"10_Birthday_Party_Singles_32x32",             pre:"Birthday_Party_Singles_32x32_",              max:200 },
+  { key:"condo",     label:"公寓",       dir:"26_Condominium_Singles_32x32",                pre:"Condominium_Singles_32x32_",                 max:120 },
+  { key:"clothing",  label:"服装店",     dir:"21_Clothing_Store_Singles_32x32",             pre:"Clothing_Store_Singles_32x32_",              max:400 },
+  { key:"christmas", label:"圣诞",       dir:"15_Christmas_Singles_32x32",                  pre:"Christmas_Singles_32x32_",                   max:200 }
+];
+const THEME_BY_KEY = Object.fromEntries(THEMES.map(t => [t.key, t]));
+const urlOf = (c, n) => BASE + THEME_BY_KEY[c].dir + "/" + THEME_BY_KEY[c].pre + n + ".png";
+
+const ROOMS = [
+  { key:"living",  label:"客厅", wall:["#efe1cd","#e3d2ba"], floor:["#d8b98e","#c8a575"], line:"rgba(150,118,80,.35)" },
+  { key:"study",   label:"书房", wall:["#e7e1d3","#d9d1c0"], floor:["#c9b699","#b8a37f"], line:"rgba(130,105,70,.35)" },
+  { key:"kitchen", label:"厨房", wall:["#e9efd6","#dbe4c2"], floor:["#ded5c4","#cdc2ac"], line:"rgba(140,120,90,.3)" },
+  { key:"garden",  label:"花园", wall:["#cfe6c4","#b0d69e"], floor:["#95c476","#7fb262"], line:"rgba(80,130,60,.35)" }
+];
+const ROOM_BY_KEY = Object.fromEntries(ROOMS.map(r => [r.key, r]));
+
+/* 每间屋子的清单：{c,n,x,y,w,h,stretch} */
+const DATA = { living:[], study:[], kitchen:[], garden:[] };
+let curRoom = "living";
+let sel = -1;
+
+const cv = document.getElementById("c");
+const ctx = cv.getContext("2d");
+ctx.imageSmoothingEnabled = false;
+const lib = document.getElementById("lib");
+const out = document.getElementById("out");
+
+const IMG = Object.create(null);
+function getImg(c, n, cb) {
+  const u = urlOf(c, n);
+  let e = IMG[u];
+  if (!e) { e = IMG[u] = { ok:false, el:new Image() }; e.el.onload = () => { e.ok = true; cb && cb(); }; e.el.onerror = () => { e.ok = false; }; e.el.src = u; }
+  else if (cb) cb();
+  return e;
+}
+
+/* ---------- 坐标换算：屏幕 <-> 画布 ---------- */
+let scale = 1, offX = 0, offY = 0;
+function fit() {
+  const st = cv.parentElement.getBoundingClientRect();
+  scale = Math.min(st.width / W, st.height / H);
+  cv.style.width  = Math.round(W * scale) + "px";
+  cv.style.height = Math.round(H * scale) + "px";
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = Math.round(W * scale * dpr);
+  cv.height = Math.round(H * scale * dpr);
+  ctx.setTransform(scale * dpr, 0, 0, scale * dpr, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  draw();
+}
+addEventListener("resize", fit);
+
+function toWorld(ev) {
+  const r = cv.getBoundingClientRect();
+  return { x: (ev.clientX - r.left) / r.width * W, y: (ev.clientY - r.top) / r.height * H };
+}
+
+/* ---------- 画 ---------- */
+function boxOf(o) {
+  const e = getImg(o.c, o.n);
+  if (o.stretch) return { x:o.x, y:o.y, w:o.w, h:o.h };
+  const iw = (e.el.naturalWidth || 32), ih = (e.el.naturalHeight || 32);
+  const h = o.w * ih / iw;
+  return { x: o.x, y: o.y + o.h - h, w: o.w, h: h };
+}
+function drawRoomBg() {
+  const R = ROOM_BY_KEY[curRoom];
+  const wg = ctx.createLinearGradient(0, 0, 0, WALL_Y);
+  wg.addColorStop(0, R.wall[0]); wg.addColorStop(1, R.wall[1]);
+  ctx.fillStyle = wg; ctx.fillRect(0, 0, W, WALL_Y);
+  ctx.fillStyle = "rgba(0,0,0,.10)"; ctx.fillRect(0, WALL_Y - 8, W, 8);
+  const fg = ctx.createLinearGradient(0, WALL_Y, 0, FLOOR.y1);
+  fg.addColorStop(0, R.floor[0]); fg.addColorStop(1, R.floor[1]);
+  ctx.fillStyle = fg; ctx.fillRect(0, WALL_Y, W, FLOOR.y1 - WALL_Y);
+  ctx.strokeStyle = R.line; ctx.lineWidth = 1;
+  for (let y = WALL_Y + 26; y < FLOOR.y1; y += 26) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+  for (let i = 0; i < 9; i++) { const x = 24 + i * 44; ctx.beginPath(); ctx.moveTo(x,WALL_Y); ctx.lineTo(x,FLOOR.y1); ctx.stroke(); }
+}
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = "#14131a"; ctx.fillRect(0, 0, W, H);
+  drawRoomBg();
+  const list = DATA[curRoom];
+  for (let i = 0; i < list.length; i++) {
+    const o = list[i];
+    const b = boxOf(o);
+    const e = getImg(o.c, o.n);
+    if (e.ok) ctx.drawImage(e.el, b.x, b.y, b.w, b.h);
+    else { ctx.save(); ctx.globalAlpha = .25; ctx.fillStyle = "#c79b6d"; ctx.fillRect(b.x, b.y, b.w, Math.max(10, b.h)); ctx.restore(); }
+    if (i === sel) {
+      ctx.save();
+      ctx.strokeStyle = "#ffd696"; ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(b.x - 1, b.y - 1, b.w + 2, b.h + 2);
+      ctx.restore();
+    }
+  }
+  ctx.save();
+  ctx.fillStyle = "rgba(255,214,150,.85)";
+  ctx.font = "600 11px sans-serif"; ctx.textAlign = "left"; ctx.textBaseline = "top";
+  ctx.fillText(ROOM_BY_KEY[curRoom].label + " · " + list.length + " 件", 10, 10);
+  ctx.restore();
+}
+
+/* ---------- 图库 ---------- */
+let scanToken = 0;
+function scan(themeKey) {
+  const T = THEME_BY_KEY[themeKey];
+  const my = ++scanToken;
+  lib.innerHTML = "";
+  let n = 1;
+  (function step() {
+    if (my !== scanToken) return;
+    if (n > T.max) return;
+    const u = urlOf(T.key, n);
+    const im = new Image();
+    im.onload = () => { if (my === scanToken) addCell(T.key, n, u); n++; step(); };
+    im.onerror = () => { n++; step(); };
+    im.src = u;
+  })();
+}
+function addCell(key, num, u) {
+  const d = document.createElement("div");
+  d.className = "cell";
+  const gi = document.createElement("img"); gi.src = u; gi.loading = "lazy";
+  const b = document.createElement("b"); b.textContent = num;
+  d.appendChild(gi); d.appendChild(b);
+  d.addEventListener("click", () => {
+    const o = { c:key, n:num, x: 120, y: 380, w: 96, h: 90, stretch:false };
+    DATA[curRoom].push(o);
+    sel = DATA[curRoom].length - 1;
+    draw(); render();
+  });
+  lib.appendChild(d);
+}
+
+/* ---------- 拖动 ---------- */
+let drag = null;
+cv.addEventListener("pointerdown", (ev) => {
+  const p = toWorld(ev);
+  const list = DATA[curRoom];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const b = boxOf(list[i]);
+    if (p.x > b.x - 6 && p.x < b.x + b.w + 6 && p.y > b.y - 6 && p.y < b.y + b.h + 6) {
+      sel = i;
+      drag = { i, dx: p.x - list[i].x, dy: p.y - (list[i].y + list[i].h) };
+      cv.setPointerCapture(ev.pointerId);
+      draw(); render();
+      return;
+    }
+  }
+  sel = -1; drag = null; draw(); render();
+});
+cv.addEventListener("pointermove", (ev) => {
+  if (!drag) return;
+  const p = toWorld(ev);
+  const o = DATA[curRoom][drag.i];
+  o.x = Math.round(Math.max(-40, Math.min(W - 20, p.x - drag.dx)));
+  o.y = Math.round(Math.max(WALL_Y - 60, Math.min(FLOOR.y1, p.y - drag.dy)));
+  draw(); render();
+});
+const stop = (ev) => { if (drag) { drag = null; render(); } };
+cv.addEventListener("pointerup", stop);
+cv.addEventListener("pointercancel", stop);
+
+/* ---------- 工具条 ---------- */
+document.getElementById("del").addEventListener("click", () => {
+  if (sel < 0) return;
+  DATA[curRoom].splice(sel, 1); sel = -1; draw(); render();
+});
+document.getElementById("narrow").addEventListener("click", () => {
+  if (sel < 0) return; const o = DATA[curRoom][sel];
+  o.w = Math.max(16, Math.round(o.w / 1.12)); draw(); render();
+});
+document.getElementById("wide").addEventListener("click", () => {
+  if (sel < 0) return; const o = DATA[curRoom][sel];
+  o.w = Math.min(400, Math.round(o.w * 1.12)); draw(); render();
+});
+document.getElementById("stretch").addEventListener("click", () => {
+  if (sel < 0) return; const o = DATA[curRoom][sel];
+  o.stretch = !o.stretch; draw(); render();
+});
+document.getElementById("back").addEventListener("click", () => {
+  if (sel <= 0) return; const l = DATA[curRoom];
+  l.unshift(l.splice(sel, 1)[0]); sel = 0; draw(); render();
+});
+document.getElementById("front").addEventListener("click", () => {
+  if (sel < 0 || sel === DATA[curRoom].length - 1) return;
+  const l = DATA[curRoom];
+  l.push(l.splice(sel, 1)[0]); sel = l.length - 1; draw(); render();
+});
+const copyBtn = document.getElementById("copy");
+copyBtn.addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText(out.value); copyBtn.textContent = "复制好了 ✓"; }
+  catch (e) { out.select(); copyBtn.textContent = "长按上面复制"; }
+  setTimeout(() => { copyBtn.textContent = "复制清单"; }, 1600);
+});
+
+function render() {
+  const l = DATA[curRoom];
+  if (!l.length) { out.value = ""; return; }
+  out.value = "// " + ROOM_BY_KEY[curRoom].label + "\n" + l.map(o =>
+    `{ c:"${o.c}", n:${o.n}, x:${o.x}, y:${o.y}, w:${o.w}, h:${o.h}` + (o.stretch ? ", stretch:true" : "") + " },"
+  ).join("\n");
+}
+
+/* ---------- 选择器 ---------- */
+const roomSel = document.getElementById("room");
+ROOMS.forEach(r => { const o = document.createElement("option"); o.value = r.key; o.textContent = r.label; roomSel.appendChild(o); });
+roomSel.addEventListener("change", () => { curRoom = roomSel.value; sel = -1; draw(); render(); });
+
+const themeSel = document.getElementById("theme");
+THEMES.forEach(t => { const o = document.createElement("option"); o.value = t.key; o.textContent = t.label; themeSel.appendChild(o); });
+themeSel.addEventListener("change", () => scan(themeSel.value));
+
+scan(THEMES[0].key);
+fit();
+render();
+</script>
+</body>
+</html>
