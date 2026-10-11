@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#14131a">
-<title>我们家 · v3.6</title>
+<title>我们家 · v3.7</title>
 <style>
   html,body{margin:0;height:100%;background:#14131a;overflow:hidden;
     -webkit-user-select:none;user-select:none;touch-action:none;
@@ -18,15 +18,14 @@
 <script>
 "use strict";
 /* ============================================================
-   我们家 · v3.6
+   我们家 · v3.7
    v3.0 家具贴图 / v3.1 修拉伸 / v3.2 接入 Exteriors / v3.2.1 花园重排
-   v3.3 人物换成品角色 / v3.4 人物改四层拼装 / v3.5 坐标定案
-   v3.6（2026-10-11 晚）：人物会转身了 —— 四个方向各一列
+   v3.3 人物换成品角色 / v3.4 四层拼装 / v3.5 坐标定案 / v3.6 会转身
+   v3.7（2026-10-11 晚）：她委屈了 —— 清泽老背对她
+     改法：清泽永远只看水平方向，正对或侧对她，不用背那一格
      叠放顺序照 CHARACTER_GENERATOR.txt：身体 → 眼睛 → 衣服 → 头发
-     四个方向（一格 32×32，都在第 1 行）：
-        列0 = 朝左   列1 = 背面   列2 = 朝右   列3 = 正面
-     （列0/列2 哪个是左，是宁宁看「四个方向」那条认出来的；
-       要是反了，把 DIR.left 和 DIR.right 那两个数对调就行）
+     四个方向（第 1 行）：列0 左 / 列1 背 / 列2 右 / 列3 正
+        —— 要是左右反了，把 DIR 里 left 和 right 两个数对调
      头发顶上那撮在第 0 行、同一列，往上提一格
      宁宁 = 粉头发（Hairstyle_28）   清泽 = 棕头发（Hairstyle_18）
      点一下宁宁换一件衣服
@@ -46,7 +45,7 @@ const BASE = {
   in: "tiles/1_Interiors/32x32/Theme_Sorter_Singles_32x32/",
   ex: "tiles/Modern_Exteriors_32x32/ME_Theme_Sorter_32x32/"
 };
-const CAT = {
+const CATX = {
   living:    { b: "in", d: "2_Living_Room_Singles_32x32/",                        p: "Living_Room_Singles_32x32_" },
   bedroom:   { b: "in", d: "4_Bedroom_Singles_32x32/",                            p: "Bedroom_Singles_32x32_" },
   kitchen:   { b: "in", d: "12_Kitchen_Singles_32x32/",                           p: "Kitchen_Singles_32x32_" },
@@ -56,7 +55,7 @@ const CAT = {
   garden:    { b: "ex", d: "17_Garden_Singles_32x32/",                            p: "ME_Singles_Garden_32x32_" },
   terrain:   { b: "ex", d: "1_Terrains_and_Fences_Singles_32x32/",                p: "ME_Singles_Terrains_and_Fences_32x32_" }
 };
-const src = (c, n) => { const t = CAT[c]; return BASE[t.b] + t.d + t.p + n + ".png"; };
+const src = (c, n) => { const t = CATX[c]; return BASE[t.b] + t.d + t.p + n + ".png"; };
 
 /* ---------- 人物：四层拼装 ---------- */
 const CG = "tiles/2_Characters/Character_Generator/";
@@ -65,7 +64,7 @@ const ROW_FRONT = 1;      /* 站着不动的那一排 */
 const ROW_HAIRTOP = 0;    /* 头发顶上那撮（要往上提一格） */
 const DISP = 48;
 
-/* 四个方向对应第 1 行的第几列 */
+/* 四个方向对应第 1 行的第几列（左右反了就把这两个数对调） */
 const DIR = { left: 0, back: 1, right: 2, front: 3 };
 
 const NING = {
@@ -395,7 +394,7 @@ function update(dt) {
     const sx = dx * SPEED * dt, sy = dy * SPEED * dt;
     if (!blocked(ning.x + sx, ning.y)) ning.x += sx;
     if (!blocked(ning.x, ning.y + sy)) ning.y += sy;
-    /* 转身：横着走优先朝左右，纯上下走就背过身/正面朝下 */
+    /* 转身：横着走优先朝左右，纯上下走就背过身／正面朝下 */
     if (Math.abs(dx) > 0.35) ning.dir = dx > 0 ? "right" : "left";
     else if (dy < -0.35) ning.dir = "back";
     else if (dy > 0.35) ning.dir = "front";
@@ -412,11 +411,13 @@ function update(dt) {
     }
     cat.face = ning.x >= cat.x ? 1 : -1;
   }
-  /* 清泽看着你：你在左他就朝左，在右就朝右 */
+
+  /* 清泽：只认水平方向 —— 正对你，或者侧身朝你。
+     永远不用「背」那一格（背对屏幕的时候，看着就像在跟你闹脾气）。 */
   if (HOME.roomId === cur) {
-    const ddx = ning.x - qz.x, ddy = ning.y - qz.y;
-    if (Math.abs(ddx) > Math.abs(ddy) * 0.8) qz.dir = ddx > 0 ? "right" : "left";
-    else qz.dir = ddy > 0 ? "front" : "back";
+    const ddx = ning.x - qz.x;
+    if (Math.abs(ddx) < 9) qz.dir = "front";
+    else qz.dir = ddx > 0 ? "right" : "left";
   }
 }
 
@@ -454,11 +455,7 @@ function drawGhostFurn(o) {
   ctx.restore();
 }
 
-/* ---------- 人物 ----------
-   顺序照 CHARACTER_GENERATOR.txt： 身体 → 眼睛 → 衣服 → 头发
-   每块从图里抠一格（row, 列按方向），底边中心贴在 (x, y)
-   lift = 往上提几格（头发顶上那撮要提一格）
------------------------------- */
+/* ---------- 人物 ---------- */
 function piece(u, row, col, lift, x, y) {
   const e = loadCG(u);
   if (!e.ok) return false;
@@ -474,7 +471,7 @@ function drawPerson(P, outfitKey, dir, x, y, bob) {
   piece(P.body, ROW_FRONT, c, 0, x, y);
   piece(P.eyes, ROW_FRONT, c, 0, x, y);
   if (outfitKey) piece(outfitPath(outfitKey), ROW_FRONT, c, 0, x, y);
-  piece(P.hair, ROW_HAIRTOP, c, 1, x, y);   /* 顶上那撮，往上一格 */
+  piece(P.hair, ROW_HAIRTOP, c, 1, x, y);   /* 顶上那撮 */
   piece(P.hair, ROW_FRONT, c, 0, x, y);     /* 脸周围那圈，含刘海 */
   ctx.restore();
 }
