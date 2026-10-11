@@ -21,9 +21,9 @@
   .cell{background:var(--card);border:1px solid var(--line);border-radius:10px;
     padding:8px 4px 6px;text-align:center;cursor:pointer;user-select:none}
   .cell.on{border-color:var(--hot);background:#2b2530}
-  .cell.dead{opacity:.25}
+  .cell.dead{opacity:.22}
   .fig{width:64px;height:128px;margin:0 auto 4px;image-rendering:pixelated;
-    background-repeat:no-repeat;background-size:256px 128px;background-position:-64px 0}
+    background-repeat:no-repeat;background-size:256px 128px;background-position:0 0}
   .cell b{display:block;font-size:11px;color:var(--dim);font-weight:500;word-break:break-all}
   .cell.on b{color:var(--hot)}
   .bar{position:fixed;left:0;right:0;bottom:0;background:rgba(20,19,26,.97);
@@ -51,19 +51,20 @@
 /* ============================================================
    挑角色 · chars
    把 Old/Single_Characters_Legacy/32x32 里的角色铺出来
-   每格取 <名字>_idle_32x32.png 的第 2 格（正面）
-   sheet 128×64 = 4 格 × 32×64；这里放大 2 倍显示
+   每格取 <名字>_idle_32x32.png 的第 1 格
+   sheet 128×64 = 4 格 × 32×64（4 个朝向，横排）
+   这里放大 2 倍显示 → 每格 64×128
    素材：Tiles by LimeZu — https://limezu.itch.io/
    ============================================================ */
 
 const BASE = "tiles/2_Characters/Old/Single_Characters_Legacy/32x32/";
 
-/* 基础角色名（把 _sleep / _clean / _read / _gift / _slicing_table 这些额外动作图滤掉了） */
+/* 只留「人」；切肉台、睡觉版、打扫版那些额外图都剔掉了 */
 const NAMES = [
-  "Adam","Alex","Amelia","Ash","Bob","Bouncer","Bruce","Butcher","Butcher_2",
+  "Adam","Alex","Amelia","Ash","Bob","Bouncer","Bruce","Butcher",
   "Chef_Alex","Chef_Lucy","Chef_Molly","Chef_Pier","Chef_Rob",
   "Cleaner_boy","Cleaner_girl","Conference_man","Conference_woman",
-  "Dan","Doctor_1","Doctor_2","Edward","Fishmonger_1","Fishmonger_2","Ghosts",
+  "Dan","Doctor_1","Doctor_2","Edward","Fishmonger_1","Fishmonger_2",
   "Halloween_Kid_1","Halloween_Kid_2",
   "Kid_Abby","Kid_Karen","Kid_Mitty","Kid_Oscar","Kid_Romeo","Kid_Tim",
   "Lucy","Molly","Nurse_1","Nurse_2","Old_man_Josh","Old_woman_Jenny","Pier",
@@ -92,14 +93,14 @@ NAMES.forEach((nm) => {
   d.addEventListener("click", () => toggle(nm, d));
   grid.appendChild(d);
 
-  /* 没有 _idle 的（比如某些职业角色）先试 <名字>_32x32.png，再不行就灰掉 */
+  /* 没有 _idle 的，退回 <名字>_32x32.png 的第一格（那是 48×9 的大合集，一格 32×32） */
   const probe = new Image();
   probe.onerror = () => {
     const alt = BASE + nm + "_32x32.png";
     const p2 = new Image();
     p2.onload = () => {
-      f.style.backgroundSize = "96px 36px";     /* 1536×576 缩到 1/16 */
-      f.style.backgroundPosition = "0 0";
+      f.style.backgroundSize = "256px 96px";   /* 1536×576 缩到 1/6 */
+      f.style.backgroundPosition = "0 -32px";
       f.style.backgroundImage = "url(\"" + alt + "\")";
     };
     p2.onerror = () => { d.classList.add("dead"); d.style.pointerEvents = "none"; };
