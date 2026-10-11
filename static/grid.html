@@ -16,6 +16,7 @@
   .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   select,input,button{font:inherit;background:var(--card);color:var(--ink);
     border:1px solid var(--line);border-radius:8px;padding:6px 9px}
+  select{max-width:100%}
   input[type=number]{width:72px}
   .hint{color:var(--dim);font-size:12px;margin-top:6px}
   .hint b{color:var(--hot)}
@@ -38,10 +39,11 @@
   <div class="row">
     <select id="file"></select>
     <label>从第 <input type="number" id="from" value="0" min="0"> 行</label>
-    <label>看 <input type="number" id="rows" value="4" min="1" max="41"> 行</label>
+    <label>看 <input type="number" id="rows" value="4" min="1" max="120"> 行</label>
     <button id="zoom">缩放 1x</button>
   </div>
-  <div class="hint">一格 <b>32×32</b>。左上是第 0 行第 0 列。点一下会记下坐标。找「正面」最好看 <b>Eyes</b> 那张 —— 眼睛只在正面出现。</div>
+  <div class="hint">一格 <b>32×32</b>。左上是第 0 行第 0 列。点一下会记下坐标。<br>
+  看人物找「正面」用 <b>Eyes</b>；看墙纸地板，挑 Room_Builder 那几行。</div>
 </header>
 
 <div class="scroll"><div class="grid" id="grid"></div></div>
@@ -52,20 +54,31 @@
 "use strict";
 /* ============================================================
    格子尺子 · grid
-   把角色生成器的大表按 32×32 切开铺出来，好定位某一格是什么
+   把大表按 32×32 切开铺出来，好定位某一格是什么
+   路径都相对 static/tiles/
    素材：Tiles by LimeZu — https://limezu.itch.io/
    ============================================================ */
 
-const CG = "tiles/2_Characters/Character_Generator/";
+const ROOT = "tiles/";
+const RB = "1_Interiors/32x32/Room_Bulder_subfiles_32x32/";
+const CG = "2_Characters/Character_Generator/";
+
 const FILES = [
-  "Eyes/32x32/Eyes_32x32_01.png",
-  "Eyes/32x32/Eyes_32x32_02.png",
-  "Bodies/32x32/Body_32x32_01.png",
-  "Bodies/32x32/Body_32x32_02.png",
-  "Hairstyles/32x32/Hairstyle_01_32x32_01.png",
-  "Hairstyles/32x32/Hairstyle_02_32x32_01.png",
-  "Outfits/32x32/Outfit_01_32x32_01.png",
-  "Outfits/32x32/Outfit_02_32x32_01.png"
+  /* ---- 搭房间：墙、地板、踢脚线 ---- */
+  RB + "Room_Builder_Walls_32x32.png",
+  RB + "Room_Builder_3d_walls_32x32.png",
+  RB + "Room_Builder_Floors_32x32.png",
+  RB + "Room_Builder_Floor_Shadows_32x32.png",
+  RB + "Room_Builder_baseboards_32x32.png",
+  RB + "Room_Builder_borders_32x32.png",
+  RB + "Room_Builder_Floor_Paths_32x32.png",
+  RB + "Room_Builder_Floor_Connectors_32x32.png",
+  RB + "Room_Builder_Arched_Entryways_32x32.png",
+  /* ---- 人物 ---- */
+  CG + "Eyes/32x32/Eyes_32x32_01.png",
+  CG + "Bodies/32x32/Body_32x32_02.png",
+  CG + "Hairstyles/32x32/Hairstyle_28_32x32_01.png",
+  CG + "Outfits/32x32/Outfit_13_32x32_01.png"
 ];
 
 const sel = document.getElementById("file");
@@ -76,7 +89,6 @@ const outEl  = document.getElementById("out");
 const zoomEl = document.getElementById("zoom");
 
 let zoom = 1;
-const picked = [];
 
 FILES.forEach((f, i) => {
   const o = document.createElement("option");
@@ -86,18 +98,16 @@ FILES.forEach((f, i) => {
 });
 
 function render() {
-  const path = CG + FILES[Number(sel.value)];
+  const path = ROOT + FILES[Number(sel.value)];
   const from = Math.max(0, Number(fromEl.value) || 0);
-  const n    = Math.max(1, Math.min(41, Number(rowsEl.value) || 4));
-  const C = 56;                       /* 1792 / 32 */
+  const n    = Math.max(1, Math.min(200, Number(rowsEl.value) || 4));
   const s = 32 * zoom;
 
-  gridEl.style.gridTemplateColumns = "repeat(" + C + "," + s + "px)";
   gridEl.innerHTML = "";
 
   const im = new Image();
   im.onload = () => {
-    const cols = Math.round(im.naturalWidth / 32);
+    const cols = Math.max(1, Math.round(im.naturalWidth / 32));
     const rws  = Math.round(im.naturalHeight / 32);
     gridEl.style.gridTemplateColumns = "repeat(" + cols + "," + s + "px)";
 
@@ -113,7 +123,7 @@ function render() {
         d.style.imageRendering = "pixelated";
         if (zoom >= 2) { const i = document.createElement("i"); i.textContent = c; d.appendChild(i); }
         d.addEventListener("click", () => {
-          if (d.classList.contains("on")) { d.classList.remove("on"); }
+          if (d.classList.contains("on")) d.classList.remove("on");
           else {
             document.querySelectorAll(".cell.on").forEach(e => e.classList.remove("on"));
             d.classList.add("on");
@@ -123,9 +133,9 @@ function render() {
         gridEl.appendChild(d);
       }
     }
-
-    /* 左边挂一行行号 */
+    outEl.value = FILES[Number(sel.value)] + "  共 " + cols + " 列 × " + rws + " 行";
   };
+  im.onerror = () => { outEl.value = "读不到：" + path; };
   im.src = path;
 }
 
