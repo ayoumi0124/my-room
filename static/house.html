@@ -21,11 +21,12 @@
    我们家 · v3.5
    v3.0 家具贴图 / v3.1 修拉伸 / v3.2 接入 Exteriors / v3.2.1 花园重排
    v3.3 人物换成品角色 / v3.4 人物改四层拼装
-   v3.5（2026-10-11 晚）：坐标定死了 —— 和宁宁在换装台上一起磨了两个小时
+   v3.5（2026-10-11 晚）：坐标定死了 —— 和宁宁在换装台上一起磨出来的
      叠放顺序照 CHARACTER_GENERATOR.txt：身体 → 眼睛 → 衣服 → 头发
-     正面站立           = 第 1 行 第 3 列
-     头发顶上那一撮     = 第 0 行 第 3 列（往上提一格，挪Y = -32）
-     头发是两块：① 行0列3（挪上去） + ② 行1列3（不动）
+     正面站立        = 第 1 行 第 3 列
+     头发顶上那一撮  = 第 0 行 第 3 列（往上提一格）
+     头发是两块：① 行0列3（提上去） + ② 行1列3（不动，含刘海）
+     宁宁 = 粉头发（Hairstyle_28）   清泽 = 棕头发（Hairstyle_18）
      点一下宁宁换一件衣服
    数据源：GET /home 和 GET /messages
    素材：Tiles by LimeZu — https://limezu.itch.io/
@@ -64,22 +65,22 @@ const ROW_HAIRTOP = 0;    /* 头发顶上那撮（要往上提一格） */
 const DISP = 48;          /* 每格显示成 48×48；整个人 48 宽 × 96 高 */
 
 const NING = {
+  body:   "Bodies/32x32/Body_32x32_02.png",
+  eyes:   "Eyes/32x32/Eyes_32x32_01.png",
+  hair:   "Hairstyles/32x32/Hairstyle_28_32x32_01.png",
+  outfit: "Outfit_13"
+};
+const QZ = {
   body:   "Bodies/32x32/Body_32x32_03.png",
   eyes:   "Eyes/32x32/Eyes_32x32_01.png",
   hair:   "Hairstyles/32x32/Hairstyle_18_32x32_01.png",
   outfit: "Outfit_02"
 };
-const QZ = {
-  body:   "Bodies/32x32/Body_32x32_06.png",
-  eyes:   "Eyes/32x32/Eyes_32x32_01.png",
-  hair:   "Hairstyles/32x32/Hairstyle_01_32x32_01.png",
-  outfit: "Outfit_08"
-};
 
 /* 能换的衣服（33 件，2026-10-11 在服务器上点过） */
 const OUTFITS = [];
 for (let i = 1; i <= 33; i++) OUTFITS.push("Outfit_" + String(i).padStart(2, "0"));
-let ningOutfitIdx = 1 % OUTFITS.length;   /* 从 Outfit_02 起（就是定下来那件） */
+let ningOutfitIdx = 12;                   /* 从 Outfit_13 起 —— 就是定下来那件 */
 
 function outfitPath(key) { return "Outfits/32x32/" + key + "_32x32_01.png"; }
 
@@ -443,7 +444,7 @@ function drawGhostFurn(o) {
 
 /* ---------- 人物 ----------
    顺序照 CHARACTER_GENERATOR.txt： 身体 → 眼睛 → 衣服 → 头发
-   每块：从图里抠一格（row, col），贴到 (x, y) 为底边中心的位置
+   每块从图里抠一格（row, col），底边中心贴在 (x, y)
    lift = 往上提几格（头发顶上那撮要提一格）
 ------------------------------ */
 function piece(u, row, col, lift, x, y) {
