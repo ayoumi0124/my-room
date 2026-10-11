@@ -71,17 +71,32 @@ const W = 360, H = 640, WALL_Y = 150;
 const FLOOR = { x0: 12, x1: 348, y0: WALL_Y, y1: 570 };
 
 const BASE = "tiles/1_Interiors/32x32/Theme_Sorter_Singles_32x32/";
+/* pre 是文件前缀。扫不到的号会自动跳过，所以写多列几个不影响。 */
 const THEMES = [
-  { key:"living",    label:"客厅",       dir:"2_Living_Room_Singles_32x32",                 pre:"Living_Room_Singles_32x32_",                 max:200 },
-  { key:"bedroom",   label:"卧室",       dir:"4_Bedroom_Singles_32x32",                     pre:"Bedroom_Singles_32x32_",                     max:600 },
-  { key:"kitchen",   label:"厨房",       dir:"12_Kitchen_Singles_32x32",                    pre:"Kitchen_Singles_32x32_",                     max:450 },
-  { key:"classroom", label:"书房/教室",  dir:"5_Classroom_and_Library_Singles_32x32",       pre:"Classroom_and_Library_Singles_32x32_",       max:300 },
-  { key:"japanese",  label:"日式",       dir:"20_Japanese_Interiors_Singles_32x32",         pre:"Japanese_Interiors_32x32_",                  max:200 },
-  { key:"bathroom",  label:"浴室",       dir:"3_Bathroom_Singles_32x32",                    pre:"Bathroom_Singles_32x32_",                    max:200 },
-  { key:"party",     label:"派对",       dir:"10_Birthday_Party_Singles_32x32",             pre:"Birthday_Party_Singles_32x32_",              max:200 },
-  { key:"condo",     label:"公寓",       dir:"26_Condominium_Singles_32x32",                pre:"Condominium_Singles_32x32_",                 max:120 },
-  { key:"clothing",  label:"服装店",     dir:"21_Clothing_Store_Singles_32x32",             pre:"Clothing_Store_Singles_32x32_",              max:400 },
-  { key:"christmas", label:"圣诞",       dir:"15_Christmas_Singles_32x32",                  pre:"Christmas_Singles_32x32_",                   max:200 }
+  { key:"living",    label:"客厅",       dir:"2_Living_Room_Singles_32x32",                    pre:"Living_Room_Singles_32x32_",                    max:220 },
+  { key:"bedroom",   label:"卧室",       dir:"4_Bedroom_Singles_32x32",                        pre:"Bedroom_Singles_32x32_",                        max:600 },
+  { key:"kitchen",   label:"厨房",       dir:"12_Kitchen_Singles_32x32",                       pre:"Kitchen_Singles_32x32_",                        max:450 },
+  { key:"classroom", label:"教室书房",   dir:"5_Classroom_and_Library_Singles_32x32",          pre:"Classroom_and_Library_Singles_32x32_",          max:300 },
+  { key:"japanese",  label:"日式",       dir:"20_Japanese_Interiors_Singles_32x32",            pre:"Japanese_Interiors_32x32_",                     max:220 },
+  { key:"bathroom",  label:"浴室",       dir:"3_Bathroom_Singles_32x32",                       pre:"Bathroom_Singles_32x32_",                       max:220 },
+  { key:"party",     label:"派对",       dir:"10_Birthday_Party_Singles_32x32",                pre:"Birthday_Party_Singles_32x32_",                 max:200 },
+  { key:"halloween", label:"万圣节",     dir:"11_Halloween_Singles_32x32",                      pre:"Halloween_Singles_32x32_",                      max:200 },
+  { key:"christmas", label:"圣诞",       dir:"15_Christmas_Singles_32x32",                      pre:"Christmas_Singles_32x32_",                      max:250 },
+  { key:"condo",     label:"公寓",       dir:"26_Condominium_Singles_32x32",                    pre:"Condominium_Singles_32x32_",                    max:150 },
+  { key:"clothing",  label:"服装店",     dir:"21_Clothing_Store_Singles_32x32",                  pre:"Clothing_Store_Singles_32x32_",                 max:450 },
+  { key:"grocery",   label:"杂货店",     dir:"16_Grocery_Store_Singles_32x32",                  pre:"Grocery_Store_Singles_32x32_",                  max:250 },
+  { key:"icecream",  label:"冰淇淋店",   dir:"24_Ice_Cream_Shop_Singles_32x32",                 pre:"Ice_Cream_Shop_Singles_32x32_",                 max:200 },
+  { key:"museum",    label:"博物馆",     dir:"22_Museum_Singles_32x32",                         pre:"Museum_Singles_32x32_",                         max:250 },
+  { key:"gym",       label:"健身房",     dir:"8_Gym_Singles_32x32",                             pre:"Gym_Singles_32x32_",                            max:250 },
+  { key:"art",        label:"美术",      dir:"7_Art_Singles_32x32",                             pre:"Art_Singles_32x32_",                            max:250 },
+  { key:"fishing",   label:"钓鱼",       dir:"9_Fishing_Singles_32x32",                         pre:"Fishing_Singles_32x32_",                        max:200 },
+  { key:"music",     label:"音乐运动",   dir:"6_Music_and_Sport_32x32",                         pre:"Music_and_Sport_Singles_32x32_",                max:250 },
+  { key:"conference",label:"会议室",     dir:"13_Conference_Hall_Singles_32x32",                pre:"Conference_Hall_Singles_32x32_",                max:200 },
+  { key:"basement",  label:"地下室",     dir:"14_Basement_Singles_32x32",                       pre:"Basement_Singles_32x32_",                       max:200 },
+  { key:"hospital",  label:"医院",       dir:"19_Hospital_SIngles_32x32",                       pre:"Hospital_Singles_32x32_",                       max:250 },
+  { key:"jail",      label:"牢房",       dir:"18_Jail_Singles_32x32",                           pre:"Jail_Singles_32x32_",                           max:400 },
+  { key:"shooting",  label:"射击场",     dir:"25_Shooting_Range_Singles_32x32",                 pre:"Shooting_Range_Singles_32x32_",                 max:200 },
+  { key:"tv",        label:"影视棚",     dir:"23_Television_and_Film_Studio_SIngles_32x32",     pre:"Television_and_Film_Studio_Singles_32x32_",     max:150 }
 ];
 const THEME_BY_KEY = Object.fromEntries(THEMES.map(t => [t.key, t]));
 const urlOf = (c, n) => BASE + THEME_BY_KEY[c].dir + "/" + THEME_BY_KEY[c].pre + n + ".png";
@@ -94,7 +109,6 @@ const ROOMS = [
 ];
 const ROOM_BY_KEY = Object.fromEntries(ROOMS.map(r => [r.key, r]));
 
-/* 每间屋子的清单：{c,n,x,y,w,h,stretch} */
 const DATA = { living:[], study:[], kitchen:[], garden:[] };
 let curRoom = "living";
 let sel = -1;
@@ -114,8 +128,7 @@ function getImg(c, n, cb) {
   return e;
 }
 
-/* ---------- 坐标换算：屏幕 <-> 画布 ---------- */
-let scale = 1, offX = 0, offY = 0;
+let scale = 1;
 function fit() {
   const st = cv.parentElement.getBoundingClientRect();
   scale = Math.min(st.width / W, st.height / H);
@@ -135,7 +148,6 @@ function toWorld(ev) {
   return { x: (ev.clientX - r.left) / r.width * W, y: (ev.clientY - r.top) / r.height * H };
 }
 
-/* ---------- 画 ---------- */
 function boxOf(o) {
   const e = getImg(o.c, o.n);
   if (o.stretch) return { x:o.x, y:o.y, w:o.w, h:o.h };
@@ -169,8 +181,7 @@ function draw() {
     else { ctx.save(); ctx.globalAlpha = .25; ctx.fillStyle = "#c79b6d"; ctx.fillRect(b.x, b.y, b.w, Math.max(10, b.h)); ctx.restore(); }
     if (i === sel) {
       ctx.save();
-      ctx.strokeStyle = "#ffd696"; ctx.lineWidth = 1.5;
-      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = "#ffd696"; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
       ctx.strokeRect(b.x - 1, b.y - 1, b.w + 2, b.h + 2);
       ctx.restore();
     }
@@ -182,7 +193,6 @@ function draw() {
   ctx.restore();
 }
 
-/* ---------- 图库 ---------- */
 let scanToken = 0;
 function scan(themeKey) {
   const T = THEME_BY_KEY[themeKey];
@@ -206,15 +216,13 @@ function addCell(key, num, u) {
   const b = document.createElement("b"); b.textContent = num;
   d.appendChild(gi); d.appendChild(b);
   d.addEventListener("click", () => {
-    const o = { c:key, n:num, x: 120, y: 380, w: 96, h: 90, stretch:false };
-    DATA[curRoom].push(o);
+    DATA[curRoom].push({ c:key, n:num, x: 120, y: 380, w: 96, h: 90, stretch:false });
     sel = DATA[curRoom].length - 1;
     draw(); render();
   });
   lib.appendChild(d);
 }
 
-/* ---------- 拖动 ---------- */
 let drag = null;
 cv.addEventListener("pointerdown", (ev) => {
   const p = toWorld(ev);
@@ -239,14 +247,12 @@ cv.addEventListener("pointermove", (ev) => {
   o.y = Math.round(Math.max(WALL_Y - 60, Math.min(FLOOR.y1, p.y - drag.dy)));
   draw(); render();
 });
-const stop = (ev) => { if (drag) { drag = null; render(); } };
+const stop = () => { if (drag) { drag = null; render(); } };
 cv.addEventListener("pointerup", stop);
 cv.addEventListener("pointercancel", stop);
 
-/* ---------- 工具条 ---------- */
 document.getElementById("del").addEventListener("click", () => {
-  if (sel < 0) return;
-  DATA[curRoom].splice(sel, 1); sel = -1; draw(); render();
+  if (sel < 0) return; DATA[curRoom].splice(sel, 1); sel = -1; draw(); render();
 });
 document.getElementById("narrow").addEventListener("click", () => {
   if (sel < 0) return; const o = DATA[curRoom][sel];
@@ -284,7 +290,6 @@ function render() {
   ).join("\n");
 }
 
-/* ---------- 选择器 ---------- */
 const roomSel = document.getElementById("room");
 ROOMS.forEach(r => { const o = document.createElement("option"); o.value = r.key; o.textContent = r.label; roomSel.appendChild(o); });
 roomSel.addEventListener("change", () => { curRoom = roomSel.value; sel = -1; draw(); render(); });
