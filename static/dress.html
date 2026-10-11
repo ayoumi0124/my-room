@@ -14,7 +14,7 @@
   h1{margin:0 0 8px;font-size:15px;font-weight:600}
   h1 small{color:var(--dim);font-weight:400;font-size:12px;margin-left:6px}
   .hint{color:var(--dim);font-size:12px}
-  .hint b{color:var(--hot)}
+  .hint b{color:var(--hot);font-weight:600}
   .stagewrap{display:flex;gap:14px;align-items:flex-start;padding:12px;flex-wrap:wrap}
   .stage{image-rendering:pixelated;border:1px solid var(--line);border-radius:10px;
     width:192px;height:192px;flex:0 0 auto;
@@ -31,7 +31,7 @@
   input[type=number]{width:60px}
   .row label{color:var(--dim);font-size:12px}
   .out{padding:0 12px 24px}
-  textarea{width:100%;height:96px;background:#11101a;color:#b8f0c0;
+  textarea{width:100%;height:110px;background:#11101a;color:#b8f0c0;
     border:1px solid var(--line);border-radius:8px;padding:8px;
     font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;resize:vertical}
 </style>
@@ -39,7 +39,8 @@
 <body>
 <header>
   <h1>换装台 <small>四层叠起来看</small></h1>
-  <div class="hint">顺序：<b>身体 → 衣服 → 头发 → 眼睛</b>。每层各自选文件和行列，下面实时叠出来。想要哪个样子，把底下那串发给清泽。</div>
+  <div class="hint">顺序：<b>身体 → 衣服 → 头发 → 眼睛</b>。每层各选一张、各填行列，中间实时叠出来。<br>
+  现有：身体 9 / 眼睛 7 / 头发 29 / 衣服 33（2026-10-11 点的数）。</div>
 </header>
 
 <div class="stagewrap">
@@ -54,21 +55,22 @@
 /* ============================================================
    换装台 · dress
    四层（身体/衣服/头发/眼睛）各选一张表 + 一格，实时叠合预览
+   数量是 2026-10-11 在服务器上 ls 出来的真数，别乱加
    素材：Tiles by LimeZu — https://limezu.itch.io/
    ============================================================ */
 
 const CG = "tiles/2_Characters/Character_Generator/";
 
 const LAYERS = [
-  { key: "body",   title: "① 身体 Body",     dir: "Bodies/32x32/",     prefix: "Body_32x32_",       max: 20, row: 1, col: 3 },
-  { key: "outfit", title: "② 衣服 Outfit",   dir: "Outfits/32x32/",    prefix: "Outfit_",           max: 40, row: 1, col: 3, suffix: "_32x32_01" },
-  { key: "hair",   title: "③ 头发 Hair",     dir: "Hairstyles/32x32/", prefix: "Hairstyle_",        max: 40, row: 1, col: 3, suffix: "_32x32_01" },
-  { key: "eyes",   title: "④ 眼睛 Eyes",     dir: "Eyes/32x32/",       prefix: "Eyes_32x32_",       max: 20, row: 1, col: 3 }
+  { key: "body",   title: "① 身体 Body（9 个肤色）", dir: "Bodies/32x32/",     prefix: "Body_32x32_",     count: 9,  row: 1, col: 3 },
+  { key: "outfit", title: "② 衣服 Outfit（33 件）",  dir: "Outfits/32x32/",    prefix: "Outfit_",         count: 33, row: 1, col: 3, suffix: "_32x32_01" },
+  { key: "hair",   title: "③ 头发 Hair（29 种）",    dir: "Hairstyles/32x32/", prefix: "Hairstyle_",      count: 29, row: 1, col: 3, suffix: "_32x32_01" },
+  { key: "eyes",   title: "④ 眼睛 Eyes（7 种）",     dir: "Eyes/32x32/",       prefix: "Eyes_32x32_",     count: 7,  row: 1, col: 3 }
 ];
 
 const CELL = 32;          /* 一格 32×32 */
 const SCALE = 6;          /* 预览放大 6 倍 → 一格 192 */
-const N = 6;              /* 参考网格：预览中心那一格四周的宽度 */
+const N = 6;              /* 参考网格 */
 
 const stage = document.getElementById("stage");
 const sctx  = stage.getContext("2d");
@@ -80,14 +82,18 @@ const layersEl = document.getElementById("layers");
 const cache = Object.create(null);
 function getImg(path) {
   let e = cache[path];
-  if (!e) { e = cache[path] = { el: new Image(), ok: false }; e.el.src = CG + path; e.el.onload = () => { e.ok = true; draw(); }; }
+  if (!e) {
+    e = cache[path] = { el: new Image(), ok: false };
+    e.el.onload  = () => { e.ok = true; draw(); };
+    e.el.onerror = () => { e.ok = false; draw(); };
+    e.el.src = CG + path;
+  }
   return e;
 }
 
-/* 给每层建下拉：候选名先列出来，加载失败的在 draw 里直接跳过 */
 function optionsFor(L) {
   const arr = [];
-  for (let i = 1; i <= L.max; i++) {
+  for (let i = 1; i <= L.count; i++) {
     const num = String(i).padStart(2, "0");
     arr.push(L.dir + L.prefix + num + (L.suffix || "") + ".png");
   }
@@ -116,10 +122,10 @@ LAYERS.forEach((L) => {
   });
   sel.addEventListener("change", () => { state[L.key].file = sel.value; draw(); });
 
-  const ri = document.createElement("input"); ri.type = "number"; ri.value = String(L.row); ri.min = 0;
+  const ri = document.createElement("input"); ri.type = "number"; ri.value = String(L.row); ri.min = 0; ri.max = 40;
   ri.addEventListener("input", () => { state[L.key].row = Number(ri.value) || 0; draw(); });
 
-  const ci = document.createElement("input"); ci.type = "number"; ci.value = String(L.col); ci.min = 0;
+  const ci = document.createElement("input"); ci.type = "number"; ci.value = String(L.col); ci.min = 0; ci.max = 60;
   ci.addEventListener("input", () => { state[L.key].col = Number(ci.value) || 0; draw(); });
 
   row.appendChild(sel);
@@ -130,12 +136,11 @@ LAYERS.forEach((L) => {
   layersEl.appendChild(box);
 });
 
-/* 预览：先按网格铺底（看对齐），再把四层按顺序叠上去 */
 function draw() {
   sctx.clearRect(0, 0, stage.width, stage.height);
   sctx.imageSmoothingEnabled = false;
 
-  /* 参考网格 —— 一格 32 像素 */
+  /* 参考网格 */
   sctx.strokeStyle = "rgba(255,255,255,.10)";
   sctx.lineWidth = 1;
   for (let i = 0; i <= N; i++) {
@@ -149,7 +154,15 @@ function draw() {
   for (const L of LAYERS) {
     const st = state[L.key];
     const e = getImg(st.file);
-    lines.push(L.key + ": " + st.file.split("/").pop() + "  行" + st.row + " 列" + st.col);
+    lines.push(L.key + "\t' + '\t'" );
+  }
+
+  /* 上面那行只是占位，真正写回下面 */
+  lines.length = 0;
+  for (const L of LAYERS) {
+    const st = state[L.key];
+    const e = getImg(st.file);
+    lines.push((L.key + ": ").padEnd(9) + st.file.split("/").pop() + "   行 " + st.row + " 列 " + st.col);
     if (!e.ok) continue;
     count++;
     sctx.drawImage(e.el,
@@ -157,11 +170,8 @@ function draw() {
       0, 0, CELL * SCALE, CELL * SCALE);
   }
 
-  outEl.value = lines.join("\n") + "\n\n（已叠上 " + count + "/4 层）";
+  outEl.value = lines.join("\n") + "\n\n叠上了 " + count + "/4 层";
 }
-
-/* 先把所有候选图都拉一遍，好让预览不闪 */
-LAYERS.forEach((L) => optionsFor(L).forEach((f) => getImg(f)));
 
 draw();
 </script>
