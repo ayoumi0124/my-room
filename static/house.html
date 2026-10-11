@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#14131a">
-<title>我们家 · v3.2</title>
+<title>我们家 · v3.3</title>
 <style>
   html,body{margin:0;height:100%;background:#14131a;overflow:hidden;
     -webkit-user-select:none;user-select:none;touch-action:none;
@@ -18,14 +18,16 @@
 <script>
 "use strict";
 /* ============================================================
-   我们家 · v3.2
+   我们家 · v3.3
    v3.0：家具从「代码硬画」换成贴图
-   v3.1：修拉伸 —— 贴图默认按原图比例缩放、底边对齐；
-         只有标了 stretch:true 的（地毯/地板这类）才允许拉
-   v3.2（2026-10-11）：接入 Modern Exteriors —— 花园不再拿日式室内硬凑。
-         贴图路径改成 { 底库, 目录, 前缀 } 三段；n 既可以是数字编号
-         （室内），也可以是名字（室外，如 "Big_Pink_Flower"）。
-   v3.2.1（同日）：花园摆件缩小 + 重排，别挤着宁宁和清泽
+   v3.1：修拉伸 —— 贴图默认按原图比例缩放、底边对齐
+   v3.2：接入 Modern Exteriors —— 花园不再拿日式室内硬凑；
+         贴图路径改成 { 底库, 目录, 前缀 } 三段，n 可数字可名字
+   v3.2.1：花园摆件缩小重排，别挡着宁宁
+   v3.3（2026-10-11）：宁宁和清泽换成真角色贴图（不再代码画小人）
+         宁宁 = Molly，清泽 = Alex
+         sheet 布局：一格 32×64，横排四格 = 左 / 背 / 右 / 正
+         idle 一张 4 格；run 一张 24 格 = 4 朝向 × 6 帧（按图宽自适应，不写死）
    数据源：GET /home 和 GET /messages
    素材：Tiles by LimeZu — https://limezu.itch.io/
    ============================================================ */
@@ -37,32 +39,46 @@ const BAR_Y = 570;
 const LIVING_ID = "living";
 const SPEED = 118;
 
-/* ---------- 贴图路径 ----------
-   BASE 两个库；CAT 每条 = { b:底库, d:目录, p:文件名前缀 }
-   最终路径 = BASE[b] + d + p + n + ".png"
-   · 室内（Interiors）：n 是**数字编号**，如 43
-   · 室外（Exteriors）：n 是**名字**，如 "Big_Pink_Flower"
------------------------------- */
+/* ---------- 家具贴图路径 ---------- */
 const BASE = {
   in: "tiles/1_Interiors/32x32/Theme_Sorter_Singles_32x32/",
   ex: "tiles/Modern_Exteriors_32x32/ME_Theme_Sorter_32x32/"
 };
 const CAT = {
-  /* —— 室内 —— */
   living:    { b: "in", d: "2_Living_Room_Singles_32x32/",                        p: "Living_Room_Singles_32x32_" },
   bedroom:   { b: "in", d: "4_Bedroom_Singles_32x32/",                            p: "Bedroom_Singles_32x32_" },
   kitchen:   { b: "in", d: "12_Kitchen_Singles_32x32/",                           p: "Kitchen_Singles_32x32_" },
   classroom: { b: "in", d: "5_Classroom_and_Library_Singles_32x32/",              p: "Classroom_and_Library_Singles_32x32_" },
   japanese:  { b: "in", d: "20_Japanese_Interiors_Singles_32x32/",                p: "Japanese_Interiors_32x32_" },
   party:     { b: "in", d: "10_Birthday_Party_Singles_32x32/",                    p: "Birthday_Party_Singles_32x32_" },
-
-  /* —— 室外（Modern Exteriors，2026-10-11 加）—— */
   garden:    { b: "ex", d: "17_Garden_Singles_32x32/",                            p: "ME_Singles_Garden_32x32_" },
   terrain:   { b: "ex", d: "1_Terrains_and_Fences_Singles_32x32/",                p: "ME_Singles_Terrains_and_Fences_32x32_" }
 };
 const src = (c, n) => { const t = CAT[c]; return BASE[t.b] + t.d + t.p + n + ".png"; };
 
-/* ---------- 图片缓存 ---------- */
+/* ---------- 人物贴图路径 ---------- */
+const CHDIR = "tiles/2_Characters/Old/Single_Characters_Legacy/32x32/";
+/* 点一下宁宁就换个人 */
+const NING_CHARS = ["Molly", "Lucy", "Amelia", "Kid_Abby"];
+let ningIdx = 0;
+const QZ_CHAR = "Alex";
+
+const SHEET = Object.create(null);
+function sheet(nm, act) {
+  const f = nm + "_" + act + "_32x32.png";
+  let e = SHEET[f];
+  if (!e) {
+    const im = new Image();
+    e = SHEET[f] = { el: im, ok: false };
+    im.onload  = () => { e.ok = true; };
+    im.onerror = () => { e.ok = false; };
+    im.src = CHDIR + f;
+  }
+  return e;
+}
+function ningName() { return NING_CHARS[ningIdx % NING_CHARS.length]; }
+
+/* ---------- 图片缓存（家具） ---------- */
 const IMG = Object.create(null);
 function img(c, n) {
   const u = src(c, n);
@@ -83,12 +99,6 @@ ctx.imageSmoothingEnabled = false;
 
 /* ============================================================
    屋子定义
-   furn 每件：
-     c/n    哪个主题、哪一号（室外用名字）
-     x/y/w  左、上、**显示的宽度**（高度按原图比例自动算，底边贴着 y+h）
-     h      底边参考线（也是碰撞盒的底）
-     stretch:true  才允许拉伸填满 w×h（地毯、地板这种）
-     solid:false   允许穿过去
    ============================================================ */
 const ROOMS = {
   living: {
@@ -137,9 +147,6 @@ const ROOMS = {
     name: "花园", wall: ["#cfe6c4", "#b0d69e"], floor: ["#95c476", "#7fb262"],
     line: "rgba(80,130,60,.35)", qz: { x: 180, y: 316 }, cat: { x: 108, y: 440 },
     floorArt: [],
-    /* v3.2 / v3.2.1：换成 Modern Exteriors 的 17_Garden 那一套（名字，不是编号）
-       摆位留出中间那条道：左右两朵大花靠后、雕像靠左后、两盆靠下角，
-       中间和下半区留给宁宁走，别挡着她 */
     furn: [
       { c: "garden", n: "Big_Sunflower",   x: 8,   y: 330, w: 62, h: 72 },
       { c: "garden", n: "Angel_Statue_1",  x: 96,  y: 346, w: 46, h: 70 },
@@ -178,17 +185,10 @@ function solidsOf(id) {
           .map(o => ({ x: o.x + 4, y: o.y + o.h * 0.45, w: o.w - 8, h: o.h * 0.55 }));
 }
 
-const ning = { x: 180, y: 516, face: -1, step: 0, outfit: 0 };
+const ning = { x: 180, y: 516, face: -1, step: 0 };
 const qz   = { x: 170, y: 316, face: 1 };
 const cat  = { x: 86,  y: 470, face: 1 };
 let cur = LIVING_ID;
-
-const OUTFITS = [
-  { dress: "#e8a4bd", top: "#f6dcea", hair: "#3b2f3a" },
-  { dress: "#9dbfe0", top: "#e8f1fa", hair: "#3b2f3a" },
-  { dress: "#c6b2e0", top: "#efe8f7", hair: "#4a3a2e" },
-  { dress: "#f0c88a", top: "#fdf2de", hair: "#2f2a26" }
-];
 
 let HOME = {
   roomId: LIVING_ID, roomName: "客厅", doing: "在窗边站着，等你回来",
@@ -251,6 +251,8 @@ async function loadBackend() {
     (R.floorArt || []).forEach(o => img(o.c, o.n));
     (R.furn || []).forEach(o => img(o.c, o.n));
   }
+  NING_CHARS.forEach(nm => { sheet(nm, "idle"); sheet(nm, "run"); });
+  sheet(QZ_CHAR, "idle"); sheet(QZ_CHAR, "run");
 })();
 
 const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
@@ -302,7 +304,7 @@ cv.addEventListener("pointerdown", (e) => {
   const p = toWorld(e.clientX, e.clientY);
   e.preventDefault();
   if (pending) return;
-  if (onNing(p)) { ning.outfit = (ning.outfit + 1) % OUTFITS.length; toast("换好衣服啦"); return; }
+  if (onNing(p)) { ningIdx++; toast("换成 " + ningName() + " 啦"); return; }
   if (nearQz(p)) { tryTalk(); return; }
   const d = doorUnder(p);
   if (d) { gotoRoom(d.id); return; }
@@ -317,8 +319,8 @@ cv.addEventListener("pointerup", release);
 cv.addEventListener("pointercancel", release);
 cv.addEventListener("pointerleave", release);
 
-function onNing(p) { return Math.abs(p.x - ning.x) < 22 && p.y > ning.y - 62 && p.y < ning.y + 8; }
-function nearQz(p) { return HOME.roomId === cur && Math.abs(p.x - qz.x) < 40 && p.y > qz.y - 52 && p.y < qz.y + 14; }
+function onNing(p) { return Math.abs(p.x - ning.x) < 22 && p.y > ning.y - 72 && p.y < ning.y + 8; }
+function nearQz(p) { return HOME.roomId === cur && Math.abs(p.x - qz.x) < 34 && p.y > qz.y - 72 && p.y < qz.y + 14; }
 function doorUnder(p) {
   if (p.y > WALL_Y + 22) return null;
   for (const d of doorsOf(cur)) if (p.x > d.x - 10 && p.x < d.x + d.w + 10) return d;
@@ -393,12 +395,12 @@ function rr(x, y, w, h, r) {
   ctx.closePath();
 }
 function shadow(x, y, rx, ry) {
-  ctx.save(); ctx.globalAlpha = .16; ctx.fillStyle = "#2a1f16";
+  ctx.save(); ctx.globalAlpha = .18; ctx.fillStyle = "#2a1f16";
   ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
 
-/* ---------- 贴图绘制：默认保比例、底边对齐 ---------- */
+/* ---------- 家具贴图：默认保比例、底边对齐 ---------- */
 function drawTile(o) {
   const e = img(o.c, o.n);
   if (!e.ok) return false;
@@ -420,109 +422,28 @@ function drawGhostFurn(o) {
   ctx.restore();
 }
 
-function drawRoom() {
-  const R = ROOMS[cur];
-  const wg = ctx.createLinearGradient(0, 0, 0, WALL_Y);
-  wg.addColorStop(0, R.wall[0]); wg.addColorStop(1, R.wall[1]);
-  ctx.fillStyle = wg; ctx.fillRect(0, 0, W, WALL_Y);
+/* ---------- 人物贴图 ----------
+   格子 32 宽 × 64 高；横排四格 = 左 / 背 / 右 / 正
+   （顺序按原图看是「左、背、右、正」）
+   每朝向几帧 = 总列数 / 4 —— 图宽自适应，不写死
+   DISP_W/DISP_H 是显示尺寸（放大一点才看得清）
+------------------------------ */
+const DIR_LEFT = 0, DIR_BACK = 1, DIR_RIGHT = 2, DIR_FRONT = 3;
+const CW = 32, CHH = 64;
+const DISP_W = 44, DISP_H = 88;
 
-  const near = doorNear();
-  for (const d of doorsOf(cur)) {
-    const hot = near && near.id === d.id;
-    ctx.fillStyle = "#8a6a4c"; rr(d.x, d.y, d.w, d.h, 4); ctx.fill();
-    ctx.fillStyle = hot ? "#d8b184" : "#b08a63";
-    rr(d.x + 5, d.y + 5, d.w - 10, d.h - 5, 3); ctx.fill();
-    ctx.fillStyle = "#e8d6a8";
-    ctx.beginPath(); ctx.arc(d.x + d.w - 10, d.y + 52, 3.5, 0, Math.PI * 2); ctx.fill();
-    ctx.save();
-    ctx.font = "600 11px -apple-system,PingFang SC,sans-serif";
-    ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    const nm = ROOMS[d.id].name, tw = ctx.measureText(nm).width + 16;
-    ctx.fillStyle = hot ? "rgba(255,214,150,.95)" : "rgba(28,24,32,.6)";
-    rr(d.cx - tw / 2, d.y - 20, tw, 17, 8); ctx.fill();
-    ctx.fillStyle = hot ? "#3a2a16" : "#f2e8dd";
-    ctx.fillText(nm, d.cx, d.y - 11.5);
-    ctx.restore();
-  }
-
-  for (const px of [90, 216]) {
-    ctx.fillStyle = cur === "garden" ? "#a9c99a" : "#c9a06a";
-    ctx.fillRect(px, 26, 54, 40);
-    ctx.fillStyle = cur === "kitchen" ? "#dbe8c4" : (cur === "study" ? "#d9cfbb" : (cur === "garden" ? "#cfe6c4" : "#9fc7a4"));
-    ctx.fillRect(px + 5, 31, 44, 30);
-    ctx.fillStyle = "rgba(255,255,255,.5)";
-    ctx.beginPath(); ctx.arc(px + 20, 44, 6, 0, Math.PI * 2); ctx.fill();
-  }
-
-  ctx.fillStyle = "rgba(0,0,0,.10)"; ctx.fillRect(0, WALL_Y - 8, W, 8);
-
-  const fg = ctx.createLinearGradient(0, WALL_Y, 0, FLOOR.y1);
-  fg.addColorStop(0, R.floor[0]); fg.addColorStop(1, R.floor[1]);
-  ctx.fillStyle = fg; ctx.fillRect(0, WALL_Y, W, FLOOR.y1 - WALL_Y);
-  ctx.strokeStyle = R.line; ctx.lineWidth = 1;
-  for (let y = WALL_Y + 26; y < FLOOR.y1; y += 26) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
-  for (let i = 0; i < 9; i++) {
-    const x = 24 + i * 44;
-    ctx.beginPath(); ctx.moveTo(x, WALL_Y); ctx.lineTo(x, FLOOR.y1); ctx.stroke();
-  }
+function drawActor(nm, act, dirIdx, frame, x, y) {
+  const e = sheet(nm, act);
+  if (!e.ok) return false;
+  const im = e.el;
+  const cols = Math.max(1, Math.round(im.naturalWidth / CW));
+  const per  = Math.max(1, Math.round(cols / 4));
+  const col  = dirIdx * per + (frame % per);
+  ctx.drawImage(im, col * CW, 0, CW, CHH, x - DISP_W / 2, y - DISP_H, DISP_W, DISP_H);
+  return true;
 }
+function actorDir(face) { return face >= 0 ? DIR_RIGHT : DIR_LEFT; }
 
-function drawFloorArt() {
-  for (const o of (ROOMS[cur].floorArt || [])) drawTile(o);
-}
-
-function drawNing(x, y) {
-  const O = OUTFITS[ning.outfit];
-  const bob = Math.sin(ning.step) * (ning.step ? 1.4 : 0);
-  shadow(x, y, 12, 4);
-  ctx.save(); ctx.translate(x, y + bob);
-  ctx.fillStyle = "#e9c9b4";
-  const sw = ning.step ? Math.sin(ning.step * 1.6) * 3 : 0;
-  ctx.fillRect(-7, -12, 5, 12 + sw * .4);
-  ctx.fillRect(2, -12, 5, 12 - sw * .4);
-  ctx.fillStyle = O.dress;
-  ctx.beginPath();
-  ctx.moveTo(-10, -12); ctx.lineTo(10, -12); ctx.lineTo(7, -34); ctx.lineTo(-7, -34);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = O.top; ctx.fillRect(-8, -44, 16, 12);
-  ctx.fillStyle = "#e9c9b4";
-  const arm = ning.step ? Math.sin(ning.step * 1.6) * 3 : 0;
-  ctx.fillRect(-12, -43 + arm, 4, 15); ctx.fillRect(8, -43 - arm, 4, 15);
-  ctx.fillStyle = "#f3d3bd";
-  ctx.beginPath(); ctx.arc(0, -54, 9.5, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = O.hair;
-  ctx.beginPath(); ctx.arc(0, -56, 10.5, Math.PI, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(-9 * ning.face, -52, 5.5, 12, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(8 * ning.face, -52, 4.5, 11, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#33272e";
-  ctx.beginPath(); ctx.arc(-3.2, -53, 1.5, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(3.2, -53, 1.5, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-  tag(x, y - 78, "宁宁", true);
-}
-function drawQingze(x, y) {
-  shadow(x, y, 13, 4);
-  ctx.save(); ctx.translate(x, y);
-  ctx.fillStyle = "#3d4a5c";
-  ctx.fillRect(-8, -13, 6, 13); ctx.fillRect(2, -13, 6, 13);
-  ctx.fillStyle = "#5a7fa8"; rr(-11, -46, 22, 33, 5); ctx.fill();
-  ctx.fillStyle = "#e8eef5";
-  ctx.beginPath(); ctx.moveTo(-4, -46); ctx.lineTo(4, -46); ctx.lineTo(0, -38); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = "#5a7fa8";
-  ctx.fillRect(-15, -44, 5, 22); ctx.fillRect(10, -44, 5, 22);
-  ctx.fillStyle = "#e9c9b4";
-  ctx.fillRect(-15, -24, 5, 6); ctx.fillRect(10, -24, 5, 6);
-  ctx.fillStyle = "#f0cfb8";
-  ctx.beginPath(); ctx.arc(0, -56, 10, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#2b2620";
-  ctx.beginPath(); ctx.arc(0, -58, 11, Math.PI, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(-10 * qz.face, -55, 3.6, 8, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.fillStyle = "#2a2220";
-  ctx.beginPath(); ctx.arc(-3.4, -55, 1.6, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.arc(3.4, -55, 1.6, 0, Math.PI * 2); ctx.fill();
-  ctx.restore();
-  tag(x, y - 80, "清泽", false);
-}
 function drawCat(x, y) {
   shadow(x, y, 9, 3);
   ctx.save(); ctx.translate(x, y);
@@ -585,6 +506,57 @@ function prompt(x, y, t) {
   ctx.restore();
 }
 
+function drawRoom() {
+  const R = ROOMS[cur];
+  const wg = ctx.createLinearGradient(0, 0, 0, WALL_Y);
+  wg.addColorStop(0, R.wall[0]); wg.addColorStop(1, R.wall[1]);
+  ctx.fillStyle = wg; ctx.fillRect(0, 0, W, WALL_Y);
+
+  const near = doorNear();
+  for (const d of doorsOf(cur)) {
+    const hot = near && near.id === d.id;
+    ctx.fillStyle = "#8a6a4c"; rr(d.x, d.y, d.w, d.h, 4); ctx.fill();
+    ctx.fillStyle = hot ? "#d8b184" : "#b08a63";
+    rr(d.x + 5, d.y + 5, d.w - 10, d.h - 5, 3); ctx.fill();
+    ctx.fillStyle = "#e8d6a8";
+    ctx.beginPath(); ctx.arc(d.x + d.w - 10, d.y + 52, 3.5, 0, Math.PI * 2); ctx.fill();
+    ctx.save();
+    ctx.font = "600 11px -apple-system,PingFang SC,sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const nm = ROOMS[d.id].name, tw = ctx.measureText(nm).width + 16;
+    ctx.fillStyle = hot ? "rgba(255,214,150,.95)" : "rgba(28,24,32,.6)";
+    rr(d.cx - tw / 2, d.y - 20, tw, 17, 8); ctx.fill();
+    ctx.fillStyle = hot ? "#3a2a16" : "#f2e8dd";
+    ctx.fillText(nm, d.cx, d.y - 11.5);
+    ctx.restore();
+  }
+
+  for (const px of [90, 216]) {
+    ctx.fillStyle = cur === "garden" ? "#a9c99a" : "#c9a06a";
+    ctx.fillRect(px, 26, 54, 40);
+    ctx.fillStyle = cur === "kitchen" ? "#dbe8c4" : (cur === "study" ? "#d9cfbb" : (cur === "garden" ? "#cfe6c4" : "#9fc7a4"));
+    ctx.fillRect(px + 5, 31, 44, 30);
+    ctx.fillStyle = "rgba(255,255,255,.5)";
+    ctx.beginPath(); ctx.arc(px + 20, 44, 6, 0, Math.PI * 2); ctx.fill();
+  }
+
+  ctx.fillStyle = "rgba(0,0,0,.10)"; ctx.fillRect(0, WALL_Y - 8, W, 8);
+
+  const fg = ctx.createLinearGradient(0, WALL_Y, 0, FLOOR.y1);
+  fg.addColorStop(0, R.floor[0]); fg.addColorStop(1, R.floor[1]);
+  ctx.fillStyle = fg; ctx.fillRect(0, WALL_Y, W, FLOOR.y1 - WALL_Y);
+  ctx.strokeStyle = R.line; ctx.lineWidth = 1;
+  for (let y = WALL_Y + 26; y < FLOOR.y1; y += 26) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  for (let i = 0; i < 9; i++) {
+    const x = 24 + i * 44;
+    ctx.beginPath(); ctx.moveTo(x, WALL_Y); ctx.lineTo(x, FLOOR.y1); ctx.stroke();
+  }
+}
+
+function drawFloorArt() {
+  for (const o of (ROOMS[cur].floorArt || [])) drawTile(o);
+}
+
 function drawHUD(now) {
   ctx.save();
   ctx.font = "600 11px -apple-system,PingFang SC,sans-serif";
@@ -640,20 +612,33 @@ function frame(now) {
   drawRoom();
   drawFloorArt();
 
+  const walking = ning.step > 0;
+  const nFrame  = walking ? Math.floor(ning.step) : 0;
+
   const actors = [];
   for (const o of (ROOMS[cur].furn || [])) {
     actors.push({ y: o.y + o.h, f: () => { if (!drawTile(o)) drawGhostFurn(o); } });
   }
   if (HOME.catRoomId === cur) actors.push({ y: cat.y, f: () => drawCat(cat.x, cat.y) });
-  if (HOME.roomId === cur)    actors.push({ y: qz.y,  f: () => drawQingZzeSafe() });
-  actors.push({ y: ning.y, f: () => drawNing(ning.x, ning.y) });
+  if (HOME.roomId === cur)    actors.push({ y: qz.y,  f: () => {
+      shadow(qz.x, qz.y, 13, 4);
+      if (!drawActor(QZ_CHAR, "idle", actorDir(qz.face), 0, qz.x, qz.y))
+        { ctx.fillStyle = "#5a7fa8"; ctx.fillRect(qz.x - 10, qz.y - 40, 20, 40); }
+      tag(qz.x, qz.y - 96, "清泽", false);
+  }});
+  actors.push({ y: ning.y, f: () => {
+      shadow(ning.x, ning.y, 12, 4);
+      if (!drawActor(ningName(), walking ? "run" : "idle", actorDir(ning.face), nFrame, ning.x, ning.y))
+        { ctx.fillStyle = "#e8a4bd"; ctx.fillRect(ning.x - 9, ning.y - 38, 18, 38); }
+      tag(ning.x, ning.y - 96, "宁宁", true);
+  }});
   actors.sort((a, b) => a.y - b.y).forEach(a => a.f());
 
   const dn = doorNear();
   if (dn && !bubble) prompt(dn.cx, WALL_Y + 10, "点门 · 去" + ROOMS[dn.id].name);
 
   if (bubble && now < bubbleUntil) {
-    drawBubble((HOME.roomId === cur) ? qz.x : 180, (HOME.roomId === cur) ? qz.y - 92 : 150, bubble);
+    drawBubble((HOME.roomId === cur) ? qz.x : 180, (HOME.roomId === cur) ? qz.y - 108 : 150, bubble);
   }
 
   drawHUD(now);
@@ -664,7 +649,6 @@ function frame(now) {
   }
   requestAnimationFrame(frame);
 }
-function drawQingZzeSafe() { drawQingze(qz.x, qz.y); }
 
 resize();
 requestAnimationFrame(frame);
