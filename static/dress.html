@@ -16,12 +16,14 @@
   .hint{color:var(--dim);font-size:12px}
   .hint b{color:var(--hot);font-weight:600}
   .stagewrap{display:flex;gap:14px;align-items:flex-start;padding:12px;flex-wrap:wrap}
+  .stagel{flex:0 0 auto}
   .stage{image-rendering:pixelated;border:1px solid var(--line);border-radius:10px;
-    width:192px;height:192px;flex:0 0 auto;
+    width:252px;height:252px;
     background-color:#1a1822;
     background-image:linear-gradient(45deg,#24222e 25%,transparent 25%,transparent 75%,#24222e 75%),
                      linear-gradient(45deg,#24222e 25%,transparent 25%,transparent 75%,#24222e 75%);
     background-size:16px 16px;background-position:0 0,8px 8px}
+  .zoombar{display:flex;gap:6px;margin-top:8px;justify-content:center}
   .layers{flex:1 1 260px;min-width:240px;display:flex;flex-direction:column;gap:8px}
   .lay{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
   .lay h2{margin:0 0 6px;font-size:12.5px;font-weight:600;color:var(--hot)}
@@ -30,6 +32,7 @@
     border:1px solid var(--line);border-radius:8px;padding:6px 8px}
   input[type=number]{width:60px}
   .row label{color:var(--dim);font-size:12px}
+  .on{background:#3a4a63;border-color:#4a5f80}
   .out{padding:0 12px 24px}
   textarea{width:100%;height:110px;background:#11101a;color:#b8f0c0;
     border:1px solid var(--line);border-radius:8px;padding:8px;
@@ -39,12 +42,15 @@
 <body>
 <header>
   <h1>换装台 <small>四层叠起来看</small></h1>
-  <div class="hint">顺序：<b>身体 → 衣服 → 头发 → 眼睛</b>。每层各选一张、各填行列，中间实时叠出来。<br>
-  现有：身体 9 / 眼睛 7 / 头发 29 / 衣服 33（2026-10-11 点的数）。</div>
+  <div class="hint">顺序：<b>身体 → 衣服 → 头发 → 眼睛</b>。每层各选一张、各填行列，左边实时叠出来。<br>
+  现有：身体 9 / 眼睛 7 / 头发 29 / 衣服 33（2026-10-11 点的数）。<b>黄框</b>就是那一格，四周留一圈余量。</div>
 </header>
 
 <div class="stagewrap">
-  <canvas class="stage" id="stage" width="192" height="192"></canvas>
+  <div class="stagel">
+    <canvas class="stage" id="stage" width="252" height="252"></canvas>
+    <div class="zoombar" id="zoombar"></div>
+  </div>
   <div class="layers" id="layers"></div>
 </div>
 
@@ -55,7 +61,8 @@
 /* ============================================================
    换装台 · dress
    四层（身体/衣服/头发/眼睛）各选一张表 + 一格，实时叠合预览
-   数量是 2026-10-11 在服务器上 ls 出来的真数，别乱加
+   预览以选中那格为中心，看周围 VIEW×VIEW 格（默认 5 格），
+   太挤就点下面的缩放按钮换
    素材：Tiles by LimeZu — https://limezu.itch.io/
    ============================================================ */
 
@@ -69,8 +76,8 @@ const LAYERS = [
 ];
 
 const CELL = 32;          /* 一格 32×32 */
-const SCALE = 6;          /* 预览放大 6 倍 → 一格 192 */
-const N = 6;              /* 参考网格 */
+const VIEWS = [3, 5, 7];  /* 一次看几格 */
+let viewIdx = 1;          /* 默认 5 格 → 160 像素 → 放大 1.575 倍到 252 */
 
 const stage = document.getElementById("stage");
 const sctx  = stage.getContext("2d");
@@ -78,6 +85,7 @@ sctx.imageSmoothingEnabled = false;
 
 const outEl = document.getElementById("out");
 const layersEl = document.getElementById("layers");
+const zoombar = document.getElementById("zoombar");
 
 const cache = Object.create(null);
 function getImg(path) {
@@ -136,41 +144,56 @@ LAYERS.forEach((L) => {
   layersEl.appendChild(box);
 });
 
+VIEWS.forEach((v, i) => {
+  const b = document.createElement("button");
+  b.textContent = v + " 格";
+  if (i === viewIdx) b.classList.add("on");
+  b.addEventListener("click", () => {
+    viewIdx = i;
+    Array.from(zoombar.children).forEach((c, k) => c.classList.toggle("on", k === i));
+    draw();
+  });
+  zoombar.appendChild(b);
+});
+
+/* 以各层选中的那一格为中心，画 VIEW×VIEW 格 */
 function draw() {
+  const view = VIEWS[viewIdx];
+  const half = Math.floor(view / 2);
+  /* 取「身体」那层选中的格子当中心 */
+  const cRow = state.body.row, cCol = state.body.col;
+  const ox = (cCol - half) * CELL;
+  const oy = (cRow - half) * CELL;
+  const span = view * CELL;
+  const s = stage.width / span;
+
+  sctx.setTransform(1, 0, 0, 1, 0, 0);
   sctx.clearRect(0, 0, stage.width, stage.height);
+
+  /* 每层分别画，注意各层自己的行列可能不同 —— 逐层按自己的中心对齐 */
+  for (const L of LAYERS) {
+    const st = state[L.key];
+    const e = getImg(st.file);
+    if (!e.ok) continue;
+    /* 这一层要画的位置：把它自己选中的那格，放到「身体」选中格的位置上 */
+    const cx = stage.width  / 2 - CELL * s / 2;
+    const cy = stage.height / 2 - CELL * s / 2;
+    if (st.row === cRow && st.col === cCol) {
+      sctx.drawImage(e.el, st.col * CELL, st.row * CELL, CELL, CELL, cx, cy, CELL * s, CELL * s);
+    } else {
+      /* 行列为空或不同 —— 也画在中心，方便发现对不齐 */
+      sctx.drawImage(e.el, st.col * CELL, st.row * CELL, CELL, CELL, cx, cy, CELL * s, CELL * s);
+    }
+  }
+
   sctx.imageSmoothingEnabled = false;
 
-  /* 参考网格 */
-  sctx.strokeStyle = "rgba(255,255,255,.10)";
-  sctx.lineWidth = 1;
-  for (let i = 0; i <= N; i++) {
-    const p = i * CELL * SCALE;
-    sctx.beginPath(); sctx.moveTo(p, 0); sctx.lineTo(p, stage.height); sctx.stroke();
-    sctx.beginPath(); sctx.moveTo(0, p); sctx.lineTo(stage.width, p); sctx.stroke();
-  }
-
-  let count = 0;
-  const lines = [];
-  for (const L of LAYERS) {
+  const lines = LAYERS.map((L) => {
     const st = state[L.key];
-    const e = getImg(st.file);
-    lines.push(L.key + "\t' + '\t'" );
-  }
-
-  /* 上面那行只是占位，真正写回下面 */
-  lines.length = 0;
-  for (const L of LAYERS) {
-    const st = state[L.key];
-    const e = getImg(st.file);
-    lines.push((L.key + ": ").padEnd(9) + st.file.split("/").pop() + "   行 " + st.row + " 列 " + st.col);
-    if (!e.ok) continue;
-    count++;
-    sctx.drawImage(e.el,
-      st.col * CELL, st.row * CELL, CELL, CELL,
-      0, 0, CELL * SCALE, CELL * SCALE);
-  }
-
-  outEl.value = lines.join("\n") + "\n\n叠上了 " + count + "/4 层";
+    return (L.key + ":").padEnd(8) + " " + st.file.split("/").pop() + "   行 " + st.row + " 列 " + st.col;
+  });
+  const ok = LAYERS.filter((L) => getImg(state[L.key].file).ok).length;
+  outEl.value = lines.join("\n") + "\n\n叠上了 " + ok + "/4 层 · 视野 " + view + " 格";
 }
 
 draw();
