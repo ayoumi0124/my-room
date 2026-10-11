@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#14131a">
-<title>我们家 · v3.1</title>
+<title>我们家 · v3.2</title>
 <style>
   html,body{margin:0;height:100%;background:#14131a;overflow:hidden;
     -webkit-user-select:none;user-select:none;touch-action:none;
@@ -18,10 +18,13 @@
 <script>
 "use strict";
 /* ============================================================
-   我们家 · v3.1
+   我们家 · v3.2
    v3.0：家具从「代码硬画」换成贴图
    v3.1：修拉伸 —— 贴图默认按原图比例缩放、底边对齐；
          只有标了 stretch:true 的（地毯/地板这类）才允许拉
+   v3.2（2026-10-11）：接入 Modern Exteriors —— 花园不再拿日式室内硬凑。
+         贴图路径改成 { 底库, 目录, 前缀 } 三段；n 既可以是数字编号
+         （室内），也可以是名字（室外，如 "Big_Pink_Flower"）。
    数据源：GET /home 和 GET /messages
    素材：Tiles by LimeZu — https://limezu.itch.io/
    ============================================================ */
@@ -33,17 +36,30 @@ const BAR_Y = 570;
 const LIVING_ID = "living";
 const SPEED = 118;
 
-/* ---------- 贴图路径 ---------- */
-const TILE = "tiles/1_Interiors/32x32/Theme_Sorter_Singles_32x32/";
-const CAT = {
-  living:    "2_Living_Room_Singles_32x32/Living_Room_Singles_32x32_",
-  bedroom:   "4_Bedroom_Singles_32x32/Bedroom_Singles_32x32_",
-  kitchen:   "12_Kitchen_Singles_32x32/Kitchen_Singles_32x32_",
-  classroom: "5_Classroom_and_Library_Singles_32x32/Classroom_and_Library_Singles_32x32_",
-  japanese:  "20_Japanese_Interiors_Singles_32x32/Japanese_Interiors_32x32_",
-  party:     "10_Birthday_Party_Singles_32x32/Birthday_Party_Singles_32x32_"
+/* ---------- 贴图路径 ----------
+   BASE 两个库；CAT 每条 = { b:底库, d:目录, p:文件名前缀 }
+   最终路径 = BASE[b] + d + p + n + ".png"
+   · 室内（Interiors）：n 是**数字编号**，如 43
+   · 室外（Exteriors）：n 是**名字**，如 "Big_Pink_Flower"
+------------------------------ */
+const BASE = {
+  in: "tiles/1_Interiors/32x32/Theme_Sorter_Singles_32x32/",
+  ex: "tiles/Modern_Exteriors_32x32/ME_Theme_Sorter_32x32/"
 };
-const src = (c, n) => TILE + CAT[c] + n + ".png";
+const CAT = {
+  /* —— 室内 —— */
+  living:    { b: "in", d: "2_Living_Room_Singles_32x32/",                        p: "Living_Room_Singles_32x32_" },
+  bedroom:   { b: "in", d: "4_Bedroom_Singles_32x32/",                            p: "Bedroom_Singles_32x32_" },
+  kitchen:   { b: "in", d: "12_Kitchen_Singles_32x32/",                           p: "Kitchen_Singles_32x32_" },
+  classroom: { b: "in", d: "5_Classroom_and_Library_Singles_32x32/",              p: "Classroom_and_Library_Singles_32x32_" },
+  japanese:  { b: "in", d: "20_Japanese_Interiors_Singles_32x32/",                p: "Japanese_Interiors_32x32_" },
+  party:     { b: "in", d: "10_Birthday_Party_Singles_32x32/",                    p: "Birthday_Party_Singles_32x32_" },
+
+  /* —— 室外（Modern Exteriors，2026-10-11 加）—— */
+  garden:    { b: "ex", d: "17_Garden_Singles_32x32/",                            p: "ME_Singles_Garden_32x32_" },
+  terrain:   { b: "ex", d: "1_Terrains_and_Fences_Singles_32x32/",                p: "ME_Singles_Terrains_and_Fences_32x32_" }
+};
+const src = (c, n) => { const t = CAT[c]; return BASE[t.b] + t.d + t.p + n + ".png"; };
 
 /* ---------- 图片缓存 ---------- */
 const IMG = Object.create(null);
@@ -67,7 +83,7 @@ ctx.imageSmoothingEnabled = false;
 /* ============================================================
    屋子定义
    furn 每件：
-     c/n    哪个主题、哪一号
+     c/n    哪个主题、哪一号（室外用名字）
      x/y/w  左、上、**显示的宽度**（高度按原图比例自动算，底边贴着 y+h）
      h      底边参考线（也是碰撞盒的底）
      stretch:true  才允许拉伸填满 w×h（地毯、地板这种）
@@ -120,12 +136,16 @@ const ROOMS = {
     name: "花园", wall: ["#cfe6c4", "#b0d69e"], floor: ["#95c476", "#7fb262"],
     line: "rgba(80,130,60,.35)", qz: { x: 180, y: 316 }, cat: { x: 108, y: 440 },
     floorArt: [],
+    /* v3.2：换成 Modern Exteriors 的 17_Garden 那一套（名字，不是编号） */
     furn: [
-      { c: "japanese", n: 54, x: 30,  y: 348, w: 96,  h: 84 },
-      { c: "japanese", n: 55, x: 216, y: 348, w: 96,  h: 84 },
-      { c: "japanese", n: 57, x: 26,  y: 470, w: 46,  h: 54 },
-      { c: "japanese", n: 58, x: 288, y: 470, w: 46,  h: 54 },
-      { c: "japanese", n: 59, x: 150, y: 468, w: 46,  h: 54 }
+      { c: "garden", n: "Big_Sunflower",      x: 24,  y: 348, w: 96, h: 84 },
+      { c: "garden", n: "Big_Pink_Flower",    x: 216, y: 348, w: 96, h: 84 },
+      { c: "garden", n: "Bush_1",             x: 20,  y: 452, w: 62, h: 56 },
+      { c: "garden", n: "Bush_5",             x: 278, y: 452, w: 62, h: 56 },
+      { c: "garden", n: "Bush_Potted_1",      x: 26,  y: 484, w: 46, h: 54 },
+      { c: "garden", n: "Bush_Potted_3",      x: 288, y: 484, w: 46, h: 54 },
+      { c: "garden", n: "Bush_Potted_5",      x: 150, y: 486, w: 46, h: 54 },
+      { c: "garden", n: "Angel_Statue_1",     x: 148, y: 330, w: 64, h: 92 }
     ]
   }
 };
