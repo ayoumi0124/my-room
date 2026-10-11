@@ -24,6 +24,11 @@
                      linear-gradient(45deg,#24222e 25%,transparent 25%,transparent 75%,#24222e 75%);
     background-size:16px 16px;background-position:0 0,8px 8px}
   .zoombar{display:flex;gap:6px;margin-top:8px;justify-content:center;flex-wrap:wrap}
+  .fourbox{margin-top:12px;background:var(--card);border:1px solid var(--line);
+    border-radius:10px;padding:8px}
+  .fourbox p{margin:0 0 6px;font-size:12px;color:var(--dim)}
+  .fourbox p b{color:var(--hot)}
+  .four{image-rendering:pixelated;width:100%;max-width:320px;display:block}
   .layers{flex:1 1 280px;min-width:250px;display:flex;flex-direction:column;gap:8px}
   .lay{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
   .lay h2{margin:0 0 6px;font-size:12.5px;font-weight:600;color:var(--hot)}
@@ -44,7 +49,7 @@
 <body>
 <header>
   <h1>换装台 <small>叠起来看</small></h1>
-  <div class="hint">顺序：<b>身体 → 衣服 → 头发 → 眼睛</b>。每层选一张、填一格，还能加<b>第二块</b>（有些头发跨两格）。<br>
+  <div class="hint">顺序：<b>身体 → 眼睛 → 衣服 → 头发</b>。每层选一张、填一格，还能加<b>第二块</b>（有些头发跨两格）。<br>
   <b>挪X / 挪Y</b> 按原图像素算，正数往右下；一格 = 32。<br>
   现有：身体 9 / 眼睛 7 / 头发 29 / 衣服 33（2026-10-11 点的数）。</div>
 </header>
@@ -53,6 +58,11 @@
   <div class="stagel">
     <canvas class="stage" id="stage" width="252" height="252"></canvas>
     <div class="zoombar" id="zoombar"></div>
+
+    <div class="fourbox">
+      <p><b>四个方向</b> —— 用你现在这套，横着拼 列0 / 列1 / 列2 / 列3 各一遍。看看哪个是左、哪个是背。</p>
+      <canvas class="four" id="four" width="256" height="192"></canvas>
+    </div>
   </div>
   <div class="layers" id="layers"></div>
 </div>
@@ -63,8 +73,8 @@
 "use strict";
 /* ============================================================
    换装台 · dress
-   每层 = 一张表 + 第一块（行/列/挪X/挪Y）+ 可选第二块（行/列/挪X/挪Y）
-   偏移单位 = 原图 32×32 像素
+   每层 = 一张表 + 第一块（行/列/挪X/挪Y）+ 可选第二块
+   下面「四个方向」：把列 0/1/2/3 各拼一遍，看朝向
    素材：Tiles by LimeZu — https://limezu.itch.io/
    ============================================================ */
 
@@ -73,7 +83,7 @@ const CG = "tiles/2_Characters/Character_Generator/";
 const LAYERS = [
   { key: "body",   title: "① 身体 Body（9 个肤色）", dir: "Bodies/32x32/",     prefix: "Body_32x32_", count: 9,  p1: { row: 1, col: 3, dx: 0,  dy: 0 },  p2: null },
   { key: "outfit", title: "② 衣服 Outfit（33 件）",  dir: "Outfits/32x32/",    prefix: "Outfit_",     count: 33, p1: { row: 1, col: 3, dx: 0,  dy: 0 },  p2: null, suffix: "_32x32_01" },
-  { key: "hair",   title: "③ 头发 Hair（29 种）",    dir: "Hairstyles/32x32/", prefix: "Hairstyle_",  count: 29, p1: { row: 8, col: 3, dx: 0,  dy: -32 }, p2: { row: 9, col: 3, dx: 0, dy: 0 }, suffix: "_32x32_01" },
+  { key: "hair",   title: "③ 头发 Hair（29 种）",    dir: "Hairstyles/32x32/", prefix: "Hairstyle_",  count: 29, p1: { row: 0, col: 3, dx: 0,  dy: -32 }, p2: { row: 1, col: 3, dx: 0, dy: 0 }, suffix: "_32x32_01" },
   { key: "eyes",   title: "④ 眼睛 Eyes（7 种）",     dir: "Eyes/32x32/",       prefix: "Eyes_32x32_", count: 7,  p1: { row: 1, col: 3, dx: 0,  dy: 0 },  p2: null }
 ];
 
@@ -83,7 +93,10 @@ let viewIdx = 1;
 
 const stage = document.getElementById("stage");
 const sctx  = stage.getContext("2d");
+const four  = document.getElementById("four");
+const fctx  = four.getContext("2d");
 sctx.imageSmoothingEnabled = false;
+fctx.imageSmoothingEnabled = false;
 
 const outEl = document.getElementById("out");
 const layersEl = document.getElementById("layers");
@@ -126,7 +139,6 @@ LAYERS.forEach((L) => {
   const h = document.createElement("h2");
   h.textContent = L.title;
 
-  /* 选文件 */
   const r1 = document.createElement("div");
   r1.className = "row";
   const sel = document.createElement("select");
@@ -138,11 +150,10 @@ LAYERS.forEach((L) => {
   sel.addEventListener("change", () => { state[L.key].file = sel.value; draw(); });
   r1.appendChild(sel);
 
-  /* 第一块 */
   const r2 = document.createElement("div");
   r2.className = "row";
   const t1 = document.createElement("label"); t1.textContent = "①"; r2.appendChild(t1);
-  function num(parent, label, get, set, step) {
+  function num(parent, label, get, set) {
     const lb = document.createElement("label"); lb.textContent = label;
     const inp = document.createElement("input");
     inp.type = "number"; inp.value = String(get());
@@ -154,7 +165,6 @@ LAYERS.forEach((L) => {
   num(r2, "挪X", () => state[L.key].p1.dx, (v) => state[L.key].p1.dx = v);
   num(r2, "挪Y", () => state[L.key].p1.dy, (v) => state[L.key].p1.dy = v);
 
-  /* 第二块 */
   const r3 = document.createElement("div");
   r3.className = "row";
   const chk = document.createElement("input");
@@ -185,43 +195,133 @@ VIEWS.forEach((v, i) => {
   zoombar.appendChild(b);
 });
 
-function piece(st, img, p, cx, cy, s) {
+const BASE_ROW = 1;   /* 基准行：身体所在的「正面站立」那一行 */
+
+function put(c2, img, p, colOverride, cx, cy, s) {
   if (!img.ok) return;
-  sctx.drawImage(img.el,
-    p.col * CELL, p.row * CELL, CELL, CELL,
+  const col = (colOverride === null) ? p.col : colOverride;
+  c2.drawImage(img.el,
+    col * CELL, p.row * CELL, CELL, CELL,
     cx + p.dx * s, cy + p.dy * s, CELL * s, CELL * s);
 }
 
-function draw() {
+function drawMain(s) {
   const view = VIEWS[viewIdx];
   const span = view * CELL;
-  const s = stage.width / span;
-  const cx = stage.width  / 2 - CELL * s / 2;
-  const cy = stage.height / 2 - CELL * s / 2;
+  const sc = stage.width / span;
+  const cx = stage.width  / 2 - CELL * sc / 2;
+  const cy = stage.height / 2 - CELL * sc / 2;
 
   sctx.setTransform(1, 0, 0, 1, 0, 0);
   sctx.clearRect(0, 0, stage.width, stage.height);
   sctx.imageSmoothingEnabled = false;
 
-  /* 参考网格 + 中心黄框 */
   sctx.strokeStyle = "rgba(255,255,255,.09)";
   sctx.lineWidth = 1;
   for (let i = 0; i <= view; i++) {
-    const p = i * CELL * s;
+    const p = i * CELL * sc;
     sctx.beginPath(); sctx.moveTo(p, 0); sctx.lineTo(p, stage.height); sctx.stroke();
     sctx.beginPath(); sctx.moveTo(0, p); sctx.lineTo(stage.width, p); sctx.stroke();
   }
   sctx.strokeStyle = "rgba(255,214,150,.5)";
   sctx.lineWidth = 2;
-  sctx.strokeRect(cx, cy, CELL * s, CELL * s);
+  sctx.strokeRect(cx, cy, CELL * sc, CELL * sc);
+
+  for (const L of LAYERS) {
+    const st = state[L.key];
+    const im = getImg(st.file);
+    put(sctx, im, st.p1, null, cx, cy, sc);
+    if (st.use2) put(sctx, im, st.p2, null, cx, cy, sc);
+  }
+}
+
+/* 四个方向：把列 0/1/2/3 各拼一遍；垂直位置按「身体那一行」为基准 */
+function drawFour() {
+  const s = 2;                            /* 每格放大 2 倍 → 64 像素 */
+  const cols = 4;
+  const baseRow = state.body.p1.row;
+  const baseDy   = state.body.p1.dy;
+  const originX  = 0;
+  const originY  = CELL * s;              /* 留一格在头上，给头发用 */
+
+  fctx.setTransform(1, 0, 0, 1, 0, 0);
+  fctx.clearRect(0, 0, four.width, four.height);
+  fctx.imageSmoothingEnabled = false;
+
+  /* 每列中间那条参考线 */
+  fctx.strokeStyle = "rgba(255,255,255,.07)";
+  fctx.lineWidth = 1;
+  for (let i = 1; i < cols; i++) {
+    const x = originX + i * CELL * s;
+    fctx.beginPath(); fctx.moveTo(x, 0); fctx.lineTo(x, four.height); fctx.stroke();
+  }
+  /* 底边线 */
+  fctx.strokeStyle = "rgba(255,214,150,.35)";
+  fctx.beginPath();
+  fctx.moveTo(0, originY + CELL * s);
+  fctx.lineTo(four.width, originY + CELL * s);
+  fctx.stroke();
+
+  for (let c = 0; c < cols; c++) {
+    const cx0 = originX + c * CELL * s;
+    for (const L of LAYERS) {
+      const st = state[L.key];
+      const im = getImg(st.file);
+      const shift = (p) => originY + (p.row - baseRow) * CELL * s + (p.dy - baseDy) * s;
+      put(fctx, im, st.p1, c, cx0, shift(st.p1), s * 0 + 0);   /* 位置已在 shift 里算好 */
+    }
+  }
+}
+
+/* put 的 cy 语义：这里是「块左上角」——上面那版 drawFour 直接用绝对坐标，
+   所以再写一个只按绝对坐标画的版本 */
+function putAbs(c2, img, p, col, ax, ay, s) {
+  if (!img.ok) return;
+  c2.drawImage(img.el,
+    col * CELL, p.row * CELL, CELL, CELL,
+    ax, ay, CELL * s, CELL * s);
+}
+function drawFourAbs() {
+  const s = 2;
+  const cols = 4;
+  const bodyRow = state.body.p1.row, bodyDy = state.body.p1.dy;
+  const originY = CELL * s;
+
+  fctx.setTransform(1, 0, 0, 1, 0, 0);
+  fctx.clearRect(0, 0, four.width, four.height);
+  fctx.imageSmoothingEnabled = false;
+
+  fctx.strokeStyle = "rgba(255,255,255,.07)";
+  fctx.lineWidth = 1;
+  for (let i = 1; i < cols; i++) {
+    const x = i * CELL * s;
+    fctx.beginPath(); fctx.moveTo(x, 0); fctx.lineTo(x, four.height); fctx.stroke();
+  }
+  fctx.strokeStyle = "rgba(255,214,150,.35)";
+  fctx.beginPath();
+  fctx.moveTo(0, originY + CELL * s);
+  fctx.lineTo(four.width, originY + CELL * s);
+  fctx.stroke();
+
+  for (let c = 0; c < cols; c++) {
+    const ax = c * CELL * s;
+    for (const L of LAYERS) {
+      const st = state[L.key];
+      const im = getImg(st.file);
+      const rel = (p) => (p.row - bodyRow) * CELL * s + (p.dy - bodyDy) * s;
+      putAbs(fctx, im, st.p1, c, ax + st.p1.dx * 0, originY + rel(st.p1), s);
+      if (st.use2) putAbs(fctx, im, st.p2, c, ax + st.p2.dx * 0, originY + rel(st.p2), s);
+    }
+  }
+}
+
+function draw() {
+  drawMain();
+  drawFourAbs();
 
   const lines = [];
   for (const L of LAYERS) {
     const st = state[L.key];
-    const im = getImg(st.file);
-    piece(st, im, st.p1, cx, cy, s);
-    if (st.use2) piece(st, im, st.p2, cx, cy, s);
-
     const fn = st.file.split("/").pop();
     let line = (L.key + ":").padEnd(8) + " " + fn +
                "  ①行" + st.p1.row + " 列" + st.p1.col + " 挪" + st.p1.dx + "/" + st.p1.dy;
@@ -230,7 +330,7 @@ function draw() {
   }
   const ok = LAYERS.filter((L) => getImg(state[L.key].file).ok).length;
   outEl.value = "/* 复制整段发给清泽 */\n" + lines.join("\n") +
-                "\n\n叠上了 " + ok + "/4 层 · 视野 " + view + " 格";
+                "\n\n叠上了 " + ok + "/4 层 · 视野 " + VIEWS[viewIdx] + " 格";
 }
 
 draw();
