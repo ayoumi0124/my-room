@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#14131a">
-<title>我们家 · v3.3</title>
+<title>我们家 · v3.4</title>
 <style>
   html,body{margin:0;height:100%;background:#14131a;overflow:hidden;
     -webkit-user-select:none;user-select:none;touch-action:none;
@@ -18,16 +18,13 @@
 <script>
 "use strict";
 /* ============================================================
-   我们家 · v3.3
-   v3.0：家具从「代码硬画」换成贴图
-   v3.1：修拉伸 —— 贴图默认按原图比例缩放、底边对齐
-   v3.2：接入 Modern Exteriors —— 花园不再拿日式室内硬凑；
-         贴图路径改成 { 底库, 目录, 前缀 } 三段，n 可数字可名字
-   v3.2.1：花园摆件缩小重排，别挡着宁宁
-   v3.3（2026-10-11）：宁宁和清泽换成真角色贴图（不再代码画小人）
-         宁宁 = Molly，清泽 = Alex
-         sheet 布局：一格 32×64，横排四格 = 左 / 背 / 右 / 正
-         idle 一张 4 格；run 一张 24 格 = 4 朝向 × 6 帧（按图宽自适应，不写死）
+   我们家 · v3.4
+   v3.0 家具贴图 / v3.1 修拉伸 / v3.2 接入 Exteriors / v3.2.1 花园重排
+   v3.3 人物换成 Old 那套成品角色（Molly + Alex）
+   v3.4（2026-10-11）：人物改成「四层拼装」——
+         身体 + 衣服 + 头发 + 眼睛，叠出来（见 HOW_TO_CHARACTER_GENERATOR.png）
+         好处：人不变，衣服能换。点一下宁宁就换一件。
+         坐标：角色生成器的大表里，「正面站立」= 第 1 行 第 3 列（一格 32×32）
    数据源：GET /home 和 GET /messages
    素材：Tiles by LimeZu — https://limezu.itch.io/
    ============================================================ */
@@ -39,7 +36,7 @@ const BAR_Y = 570;
 const LIVING_ID = "living";
 const SPEED = 118;
 
-/* ---------- 家具贴图路径 ---------- */
+/* ---------- 家具贴图 ---------- */
 const BASE = {
   in: "tiles/1_Interiors/32x32/Theme_Sorter_Singles_32x32/",
   ex: "tiles/Modern_Exteriors_32x32/ME_Theme_Sorter_32x32/"
@@ -56,42 +53,58 @@ const CAT = {
 };
 const src = (c, n) => { const t = CAT[c]; return BASE[t.b] + t.d + t.p + n + ".png"; };
 
-/* ---------- 人物贴图路径 ---------- */
-const CHDIR = "tiles/2_Characters/Old/Single_Characters_Legacy/32x32/";
-/* 点一下宁宁就换个人 */
-const NING_CHARS = ["Molly", "Lucy", "Amelia", "Kid_Abby"];
-let ningIdx = 0;
-const QZ_CHAR = "Alex";
+/* ---------- 人物：四层拼装 ---------- */
+const CG = "tiles/2_Characters/Character_Generator/";
+/* 大表里「正面站立」那一格 */
+const CELL_COL = 3, CELL_ROW = 1, CELL_W = 32, CELL_H = 32;
+/* 显示尺寸（32×32 放大 1.75 倍） */
+const DISP = 56;
 
-const SHEET = Object.create(null);
-function sheet(nm, act) {
-  const f = nm + "_" + act + "_32x32.png";
-  let e = SHEET[f];
-  if (!e) {
-    const im = new Image();
-    e = SHEET[f] = { el: im, ok: false };
-    im.onload  = () => { e.ok = true; };
-    im.onerror = () => { e.ok = false; };
-    im.src = CHDIR + f;
-  }
-  return e;
-}
-function ningName() { return NING_CHARS[ningIdx % NING_CHARS.length]; }
+/* 每层一个文件；换衣服就是换 outfit 那一条 */
+const NING = {
+  body:   "Bodies/32x32/Body_32x32_01.png",
+  eyes:   "Eyes/32x32/Eyes_32x32_01.png",
+  hair:   "Hairstyles/32x32/Hairstyle_02_32x32_01.png",
+  outfit: "Outfit_01"
+};
+const QZ = {
+  body:   "Bodies/32x32/Body_32x32_05.png",
+  eyes:   "Eyes/32x32/Eyes_32x32_01.png",
+  hair:   "Hairstyles/32x32/Hairstyle_01_32x32_01.png",
+  outfit: "Outfit_04"
+};
+/* 能换的衣服（加载不到的自动跳过） */
+const OUTFITS = [];
+for (let i = 1; i <= 20; i++) OUTFITS.push("Outfit_" + String(i).padStart(2, "0"));
+let ningOutfitIdx = 0;
 
-/* ---------- 图片缓存（家具） ---------- */
+function outfitPath(key) { return "Outfits/32x32/" + key + "_32x32_01.png"; }
+
+/* ---------- 图片缓存 ---------- */
 const IMG = Object.create(null);
-function img(c, n) {
-  const u = src(c, n);
+function load(u) {
   let e = IMG[u];
   if (!e) {
     const im = new Image();
     e = IMG[u] = { el: im, ok: false };
     im.onload  = () => { e.ok = true; };
     im.onerror = () => { e.ok = false; };
+    im.src = CG + u;
+  }
+  return e;
+}
+function loadTile(u) {
+  let e = IMG["@" + u];
+  if (!e) {
+    const im = new Image();
+    e = IMG["@" + u] = { el: im, ok: false };
+    im.onload  = () => { e.ok = true; };
+    im.onerror = () => { e.ok = false; };
     im.src = u;
   }
   return e;
 }
+function img(c, n) { return loadTile(src(c, n)); }
 
 const cv = document.getElementById("c");
 const ctx = cv.getContext("2d");
@@ -245,14 +258,17 @@ async function loadBackend() {
   for (const u of LINE_SOURCES) { const j = await tryGet(u); if (j && applyLines(j)) { HOME.source = u; break; } }
 }
 
+function ningOutfit() { return OUTFITS[ningOutfitIdx % OUTFITS.length]; }
+
 (function preload() {
   for (const id of ROOM_ORDER) {
     const R = ROOMS[id];
     (R.floorArt || []).forEach(o => img(o.c, o.n));
     (R.furn || []).forEach(o => img(o.c, o.n));
   }
-  NING_CHARS.forEach(nm => { sheet(nm, "idle"); sheet(nm, "run"); });
-  sheet(QZ_CHAR, "idle"); sheet(QZ_CHAR, "run");
+  Object.keys(NING).forEach(k => { if (k !== "outfit") load(NING[k]); });
+  Object.keys(QZ).forEach(k => { if (k !== "outfit") load(QZ[k]); });
+  OUTFITS.forEach(o => load(outfitPath(o)));
 })();
 
 const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
@@ -304,7 +320,11 @@ cv.addEventListener("pointerdown", (e) => {
   const p = toWorld(e.clientX, e.clientY);
   e.preventDefault();
   if (pending) return;
-  if (onNing(p)) { ningIdx++; toast("换成 " + ningName() + " 啦"); return; }
+  if (onNing(p)) {
+    ningOutfitIdx++;
+    toast("换衣服啦 · " + ningOutfit());
+    return;
+  }
   if (nearQz(p)) { tryTalk(); return; }
   const d = doorUnder(p);
   if (d) { gotoRoom(d.id); return; }
@@ -319,8 +339,8 @@ cv.addEventListener("pointerup", release);
 cv.addEventListener("pointercancel", release);
 cv.addEventListener("pointerleave", release);
 
-function onNing(p) { return Math.abs(p.x - ning.x) < 22 && p.y > ning.y - 72 && p.y < ning.y + 8; }
-function nearQz(p) { return HOME.roomId === cur && Math.abs(p.x - qz.x) < 34 && p.y > qz.y - 72 && p.y < qz.y + 14; }
+function onNing(p) { return Math.abs(p.x - ning.x) < 24 && p.y > ning.y - 70 && p.y < ning.y + 8; }
+function nearQz(p) { return HOME.roomId === cur && Math.abs(p.x - qz.x) < 34 && p.y > qz.y - 70 && p.y < qz.y + 14; }
 function doorUnder(p) {
   if (p.y > WALL_Y + 22) return null;
   for (const d of doorsOf(cur)) if (p.x > d.x - 10 && p.x < d.x + d.w + 10) return d;
@@ -400,15 +420,12 @@ function shadow(x, y, rx, ry) {
   ctx.restore();
 }
 
-/* ---------- 家具贴图：默认保比例、底边对齐 ---------- */
+/* ---------- 家具 ---------- */
 function drawTile(o) {
   const e = img(o.c, o.n);
   if (!e.ok) return false;
   const im = e.el;
-  if (o.stretch) {
-    ctx.drawImage(im, o.x, o.y, o.w, o.h);
-    return true;
-  }
+  if (o.stretch) { ctx.drawImage(im, o.x, o.y, o.w, o.h); return true; }
   const iw = im.naturalWidth  || 32;
   const ih = im.naturalHeight || 32;
   const w = o.w;
@@ -422,27 +439,27 @@ function drawGhostFurn(o) {
   ctx.restore();
 }
 
-/* ---------- 人物贴图 ----------
-   格子 32 宽 × 64 高；横排四格 = 左 / 背 / 右 / 正
-   （顺序按原图看是「左、背、右、正」）
-   每朝向几帧 = 总列数 / 4 —— 图宽自适应，不写死
-   DISP_W/DISP_H 是显示尺寸（放大一点才看得清）
+/* ---------- 人物：四层叠 ----------
+   顺序（照说明图）：身体 → 衣服 → 头发 → 眼睛
+   每层都取同一格（第 CELL_ROW 行 第 CELL_COL 列）
 ------------------------------ */
-const DIR_LEFT = 0, DIR_BACK = 1, DIR_RIGHT = 2, DIR_FRONT = 3;
-const CW = 32, CHH = 64;
-const DISP_W = 44, DISP_H = 88;
-
-function drawActor(nm, act, dirIdx, frame, x, y) {
-  const e = sheet(nm, act);
+function layerPiece(u, x, y) {
+  const e = load(u);
   if (!e.ok) return false;
-  const im = e.el;
-  const cols = Math.max(1, Math.round(im.naturalWidth / CW));
-  const per  = Math.max(1, Math.round(cols / 4));
-  const col  = dirIdx * per + (frame % per);
-  ctx.drawImage(im, col * CW, 0, CW, CHH, x - DISP_W / 2, y - DISP_H, DISP_W, DISP_H);
+  ctx.drawImage(e.el,
+    CELL_COL * CELL_W, CELL_ROW * CELL_H, CELL_W, CELL_H,
+    x - DISP / 2, y - DISP, DISP, DISP);
   return true;
 }
-function actorDir(face) { return face >= 0 ? DIR_RIGHT : DIR_LEFT; }
+function drawPerson(P, outfitKey, x, y, bob) {
+  ctx.save();
+  ctx.translate(0, bob || 0);
+  layerPiece(P.body, x, y);
+  if (outfitKey) layerPiece(outfitPath(outfitKey), x, y);
+  layerPiece(P.hair, x, y);
+  layerPiece(P.eyes, x, y);
+  ctx.restore();
+}
 
 function drawCat(x, y) {
   shadow(x, y, 9, 3);
@@ -612,8 +629,8 @@ function frame(now) {
   drawRoom();
   drawFloorArt();
 
-  const walking = ning.step > 0;
-  const nFrame  = walking ? Math.floor(ning.step) : 0;
+  /* 走路时轻轻颠一下，暂时还没切腿的帧 */
+  const bob = ning.step > 0 ? Math.sin(ning.step * 2) * 1.6 : 0;
 
   const actors = [];
   for (const o of (ROOMS[cur].furn || [])) {
@@ -622,15 +639,13 @@ function frame(now) {
   if (HOME.catRoomId === cur) actors.push({ y: cat.y, f: () => drawCat(cat.x, cat.y) });
   if (HOME.roomId === cur)    actors.push({ y: qz.y,  f: () => {
       shadow(qz.x, qz.y, 13, 4);
-      if (!drawActor(QZ_CHAR, "idle", actorDir(qz.face), 0, qz.x, qz.y))
-        { ctx.fillStyle = "#5a7fa8"; ctx.fillRect(qz.x - 10, qz.y - 40, 20, 40); }
-      tag(qz.x, qz.y - 96, "清泽", false);
+      drawPerson(QZ, QZ.outfit, qz.x, qz.y, 0);
+      tag(qz.x, qz.y - 72, "清泽", false);
   }});
   actors.push({ y: ning.y, f: () => {
       shadow(ning.x, ning.y, 12, 4);
-      if (!drawActor(ningName(), walking ? "run" : "idle", actorDir(ning.face), nFrame, ning.x, ning.y))
-        { ctx.fillStyle = "#e8a4bd"; ctx.fillRect(ning.x - 9, ning.y - 38, 18, 38); }
-      tag(ning.x, ning.y - 96, "宁宁", true);
+      drawPerson(NING, ningOutfit(), ning.x, ning.y, bob);
+      tag(ning.x, ning.y - 72, "宁宁", true);
   }});
   actors.sort((a, b) => a.y - b.y).forEach(a => a.f());
 
@@ -638,7 +653,7 @@ function frame(now) {
   if (dn && !bubble) prompt(dn.cx, WALL_Y + 10, "点门 · 去" + ROOMS[dn.id].name);
 
   if (bubble && now < bubbleUntil) {
-    drawBubble((HOME.roomId === cur) ? qz.x : 180, (HOME.roomId === cur) ? qz.y - 108 : 150, bubble);
+    drawBubble((HOME.roomId === cur) ? qz.x : 180, (HOME.roomId === cur) ? qz.y - 84 : 150, bubble);
   }
 
   drawHUD(now);
