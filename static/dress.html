@@ -60,8 +60,8 @@
     <div class="zoombar" id="zoombar"></div>
 
     <div class="fourbox">
-      <p><b>四个方向</b> —— 用你现在这套，横着拼 列0 / 列1 / 列2 / 列3 各一遍。看看哪个是左、哪个是背。</p>
-      <canvas class="four" id="four" width="256" height="192"></canvas>
+      <p><b>四个方向</b> —— 上面这套，横着把 列0 / 列1 / 列2 / 列3 各拼一遍。看哪个是左、哪个是背。</p>
+      <canvas class="four" id="four" width="256" height="160"></canvas>
     </div>
   </div>
   <div class="layers" id="layers"></div>
@@ -74,6 +74,7 @@
 /* ============================================================
    换装台 · dress
    每层 = 一张表 + 第一块（行/列/挪X/挪Y）+ 可选第二块
+   「挪Y」是这一块相对基准位置的完整偏移（行号只决定抠哪一格）
    下面「四个方向」：把列 0/1/2/3 各拼一遍，看朝向
    素材：Tiles by LimeZu — https://limezu.itch.io/
    ============================================================ */
@@ -150,9 +151,6 @@ LAYERS.forEach((L) => {
   sel.addEventListener("change", () => { state[L.key].file = sel.value; draw(); });
   r1.appendChild(sel);
 
-  const r2 = document.createElement("div");
-  r2.className = "row";
-  const t1 = document.createElement("label"); t1.textContent = "①"; r2.appendChild(t1);
   function num(parent, label, get, set) {
     const lb = document.createElement("label"); lb.textContent = label;
     const inp = document.createElement("input");
@@ -160,6 +158,10 @@ LAYERS.forEach((L) => {
     inp.addEventListener("input", () => { set(Number(inp.value) || 0); draw(); });
     parent.appendChild(lb); parent.appendChild(inp);
   }
+
+  const r2 = document.createElement("div");
+  r2.className = "row";
+  const t1 = document.createElement("label"); t1.textContent = "①"; r2.appendChild(t1);
   num(r2, "行", () => state[L.key].p1.row, (v) => state[L.key].p1.row = v);
   num(r2, "列", () => state[L.key].p1.col, (v) => state[L.key].p1.col = v);
   num(r2, "挪X", () => state[L.key].p1.dx, (v) => state[L.key].p1.dx = v);
@@ -195,20 +197,17 @@ VIEWS.forEach((v, i) => {
   zoombar.appendChild(b);
 });
 
-const BASE_ROW = 1;   /* 基准行：身体所在的「正面站立」那一行 */
-
-function put(c2, img, p, colOverride, cx, cy, s) {
+/* 抠一格贴上去；colOverride 不为 null 时用给定列（四方向预览用） */
+function blit(c2, img, p, col, x, y, s) {
   if (!img.ok) return;
-  const col = (colOverride === null) ? p.col : colOverride;
   c2.drawImage(img.el,
     col * CELL, p.row * CELL, CELL, CELL,
-    cx + p.dx * s, cy + p.dy * s, CELL * s, CELL * s);
+    x, y, CELL * s, CELL * s);
 }
 
-function drawMain(s) {
+function drawMain() {
   const view = VIEWS[viewIdx];
-  const span = view * CELL;
-  const sc = stage.width / span;
+  const sc = stage.width / (view * CELL);
   const cx = stage.width  / 2 - CELL * sc / 2;
   const cy = stage.height / 2 - CELL * sc / 2;
 
@@ -219,9 +218,9 @@ function drawMain(s) {
   sctx.strokeStyle = "rgba(255,255,255,.09)";
   sctx.lineWidth = 1;
   for (let i = 0; i <= view; i++) {
-    const p = i * CELL * sc;
-    sctx.beginPath(); sctx.moveTo(p, 0); sctx.lineTo(p, stage.height); sctx.stroke();
-    sctx.beginPath(); sctx.moveTo(0, p); sctx.lineTo(stage.width, p); sctx.stroke();
+    const q = i * CELL * sc;
+    sctx.beginPath(); sctx.moveTo(q, 0); sctx.lineTo(q, stage.height); sctx.stroke();
+    sctx.beginPath(); sctx.moveTo(0, q); sctx.lineTo(stage.width, q); sctx.stroke();
   }
   sctx.strokeStyle = "rgba(255,214,150,.5)";
   sctx.lineWidth = 2;
@@ -230,62 +229,15 @@ function drawMain(s) {
   for (const L of LAYERS) {
     const st = state[L.key];
     const im = getImg(st.file);
-    put(sctx, im, st.p1, null, cx, cy, sc);
-    if (st.use2) put(sctx, im, st.p2, null, cx, cy, sc);
+    blit(sctx, im, st.p1, st.p1.col, cx + st.p1.dx * sc, cy + st.p1.dy * sc, sc);
+    if (st.use2) blit(sctx, im, st.p2, st.p2.col, cx + st.p2.dx * sc, cy + st.p2.dy * sc, sc);
   }
 }
 
-/* 四个方向：把列 0/1/2/3 各拼一遍；垂直位置按「身体那一行」为基准 */
+/* 四个方向：列 0/1/2/3 各拼一遍；「挪Y」就是相对基准的完整偏移 */
 function drawFour() {
-  const s = 2;                            /* 每格放大 2 倍 → 64 像素 */
-  const cols = 4;
-  const baseRow = state.body.p1.row;
-  const baseDy   = state.body.p1.dy;
-  const originX  = 0;
-  const originY  = CELL * s;              /* 留一格在头上，给头发用 */
-
-  fctx.setTransform(1, 0, 0, 1, 0, 0);
-  fctx.clearRect(0, 0, four.width, four.height);
-  fctx.imageSmoothingEnabled = false;
-
-  /* 每列中间那条参考线 */
-  fctx.strokeStyle = "rgba(255,255,255,.07)";
-  fctx.lineWidth = 1;
-  for (let i = 1; i < cols; i++) {
-    const x = originX + i * CELL * s;
-    fctx.beginPath(); fctx.moveTo(x, 0); fctx.lineTo(x, four.height); fctx.stroke();
-  }
-  /* 底边线 */
-  fctx.strokeStyle = "rgba(255,214,150,.35)";
-  fctx.beginPath();
-  fctx.moveTo(0, originY + CELL * s);
-  fctx.lineTo(four.width, originY + CELL * s);
-  fctx.stroke();
-
-  for (let c = 0; c < cols; c++) {
-    const cx0 = originX + c * CELL * s;
-    for (const L of LAYERS) {
-      const st = state[L.key];
-      const im = getImg(st.file);
-      const shift = (p) => originY + (p.row - baseRow) * CELL * s + (p.dy - baseDy) * s;
-      put(fctx, im, st.p1, c, cx0, shift(st.p1), s * 0 + 0);   /* 位置已在 shift 里算好 */
-    }
-  }
-}
-
-/* put 的 cy 语义：这里是「块左上角」——上面那版 drawFour 直接用绝对坐标，
-   所以再写一个只按绝对坐标画的版本 */
-function putAbs(c2, img, p, col, ax, ay, s) {
-  if (!img.ok) return;
-  c2.drawImage(img.el,
-    col * CELL, p.row * CELL, CELL, CELL,
-    ax, ay, CELL * s, CELL * s);
-}
-function drawFourAbs() {
   const s = 2;
-  const cols = 4;
-  const bodyRow = state.body.p1.row, bodyDy = state.body.p1.dy;
-  const originY = CELL * s;
+  const originY = CELL * s;          /* 给头上的那块留一格 */
 
   fctx.setTransform(1, 0, 0, 1, 0, 0);
   fctx.clearRect(0, 0, four.width, four.height);
@@ -293,7 +245,7 @@ function drawFourAbs() {
 
   fctx.strokeStyle = "rgba(255,255,255,.07)";
   fctx.lineWidth = 1;
-  for (let i = 1; i < cols; i++) {
+  for (let i = 1; i < 4; i++) {
     const x = i * CELL * s;
     fctx.beginPath(); fctx.moveTo(x, 0); fctx.lineTo(x, four.height); fctx.stroke();
   }
@@ -303,27 +255,25 @@ function drawFourAbs() {
   fctx.lineTo(four.width, originY + CELL * s);
   fctx.stroke();
 
-  for (let c = 0; c < cols; c++) {
+  for (let c = 0; c < 4; c++) {
     const ax = c * CELL * s;
     for (const L of LAYERS) {
       const st = state[L.key];
       const im = getImg(st.file);
-      const rel = (p) => (p.row - bodyRow) * CELL * s + (p.dy - bodyDy) * s;
-      putAbs(fctx, im, st.p1, c, ax + st.p1.dx * 0, originY + rel(st.p1), s);
-      if (st.use2) putAbs(fctx, im, st.p2, c, ax + st.p2.dx * 0, originY + rel(st.p2), s);
+      blit(fctx, im, st.p1, c, ax + st.p1.dx * s, originY + st.p1.dy * s, s);
+      if (st.use2) blit(fctx, im, st.p2, c, ax + st.p2.dx * s, originY + st.p2.dy * s, s);
     }
   }
 }
 
 function draw() {
   drawMain();
-  drawFourAbs();
+  drawFour();
 
   const lines = [];
   for (const L of LAYERS) {
     const st = state[L.key];
-    const fn = st.file.split("/").pop();
-    let line = (L.key + ":").padEnd(8) + " " + fn +
+    let line = (L.key + ":").padEnd(8) + " " + st.file.split("/").pop() +
                "  ①行" + st.p1.row + " 列" + st.p1.col + " 挪" + st.p1.dx + "/" + st.p1.dy;
     if (st.use2) line += "  ②行" + st.p2.row + " 列" + st.p2.col + " 挪" + st.p2.dx + "/" + st.p2.dy;
     lines.push(line);
