@@ -25,6 +25,7 @@
    v3.2（2026-10-11）：接入 Modern Exteriors —— 花园不再拿日式室内硬凑。
          贴图路径改成 { 底库, 目录, 前缀 } 三段；n 既可以是数字编号
          （室内），也可以是名字（室外，如 "Big_Pink_Flower"）。
+   v3.2.1（同日）：花园摆件缩小 + 重排，别挤着宁宁和清泽
    数据源：GET /home 和 GET /messages
    素材：Tiles by LimeZu — https://limezu.itch.io/
    ============================================================ */
@@ -136,16 +137,15 @@ const ROOMS = {
     name: "花园", wall: ["#cfe6c4", "#b0d69e"], floor: ["#95c476", "#7fb262"],
     line: "rgba(80,130,60,.35)", qz: { x: 180, y: 316 }, cat: { x: 108, y: 440 },
     floorArt: [],
-    /* v3.2：换成 Modern Exteriors 的 17_Garden 那一套（名字，不是编号） */
+    /* v3.2 / v3.2.1：换成 Modern Exteriors 的 17_Garden 那一套（名字，不是编号）
+       摆位留出中间那条道：左右两朵大花靠后、雕像靠左后、两盆靠下角，
+       中间和下半区留给宁宁走，别挡着她 */
     furn: [
-      { c: "garden", n: "Big_Sunflower",      x: 24,  y: 348, w: 96, h: 84 },
-      { c: "garden", n: "Big_Pink_Flower",    x: 216, y: 348, w: 96, h: 84 },
-      { c: "garden", n: "Bush_1",             x: 20,  y: 452, w: 62, h: 56 },
-      { c: "garden", n: "Bush_5",             x: 278, y: 452, w: 62, h: 56 },
-      { c: "garden", n: "Bush_Potted_1",      x: 26,  y: 484, w: 46, h: 54 },
-      { c: "garden", n: "Bush_Potted_3",      x: 288, y: 484, w: 46, h: 54 },
-      { c: "garden", n: "Bush_Potted_5",      x: 150, y: 486, w: 46, h: 54 },
-      { c: "garden", n: "Angel_Statue_1",     x: 148, y: 330, w: 64, h: 92 }
+      { c: "garden", n: "Big_Sunflower",   x: 8,   y: 330, w: 62, h: 72 },
+      { c: "garden", n: "Angel_Statue_1",  x: 96,  y: 346, w: 46, h: 70 },
+      { c: "garden", n: "Big_Pink_Flower", x: 290, y: 330, w: 62, h: 72 },
+      { c: "garden", n: "Bush_Potted_1",   x: 20,  y: 488, w: 44, h: 54 },
+      { c: "garden", n: "Bush_Potted_3",   x: 296, y: 488, w: 44, h: 54 }
     ]
   }
 };
