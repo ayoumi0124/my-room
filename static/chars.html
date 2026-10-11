@@ -17,13 +17,14 @@
   .hint{color:var(--dim);font-size:12px}
   .hint b{color:var(--hot);font-weight:600}
   .grid{display:grid;gap:8px;padding:10px;
-    grid-template-columns:repeat(auto-fill,minmax(108px,1fr))}
+    grid-template-columns:repeat(auto-fill,minmax(148px,1fr))}
   .cell{background:var(--card);border:1px solid var(--line);border-radius:10px;
-    padding:8px 4px 6px;text-align:center;cursor:pointer;user-select:none}
+    padding:8px 6px 6px;text-align:center;cursor:pointer;user-select:none}
   .cell.on{border-color:var(--hot);background:#2b2530}
   .cell.dead{opacity:.22}
-  .fig{width:64px;height:128px;margin:0 auto 4px;image-rendering:pixelated;
-    background-repeat:no-repeat;background-size:256px 128px;background-position:0 0}
+  /* 整张 idle 原样铺出来：128×64 = 2:1，四个朝向并排 */
+  .fig{width:100%;aspect-ratio:2/1;margin:0 auto 5px;image-rendering:pixelated;
+    background-repeat:no-repeat;background-size:contain;background-position:center}
   .cell b{display:block;font-size:11px;color:var(--dim);font-weight:500;word-break:break-all}
   .cell.on b{color:var(--hot)}
   .bar{position:fixed;left:0;right:0;bottom:0;background:rgba(20,19,26,.97);
@@ -37,7 +38,7 @@
 <body>
 <header>
   <h1>挑角色 <small>Old / Single_Characters_Legacy</small></h1>
-  <div class="hint">用的是每人的 <b>_idle</b> 那张，取正面那一格。点两个（宁宁一个、清泽一个），底下会攒出名字。</div>
+  <div class="hint">每格是整张 <b>_idle</b>（四个朝向并排：正、左、右、背）。点两个 —— 宁宁一个、清泽一个。</div>
 </header>
 
 <div class="grid pad" id="grid"></div>
@@ -50,16 +51,12 @@
 "use strict";
 /* ============================================================
    挑角色 · chars
-   把 Old/Single_Characters_Legacy/32x32 里的角色铺出来
-   每格取 <名字>_idle_32x32.png 的第 1 格
-   sheet 128×64 = 4 格 × 32×64（4 个朝向，横排）
-   这里放大 2 倍显示 → 每格 64×128
+   整张 <名字>_idle_32x32.png 原样铺出来，不裁切
    素材：Tiles by LimeZu — https://limezu.itch.io/
    ============================================================ */
 
 const BASE = "tiles/2_Characters/Old/Single_Characters_Legacy/32x32/";
 
-/* 只留「人」；切肉台、睡觉版、打扫版那些额外图都剔掉了 */
 const NAMES = [
   "Adam","Alex","Amelia","Ash","Bob","Bouncer","Bruce","Butcher",
   "Chef_Alex","Chef_Lucy","Chef_Molly","Chef_Pier","Chef_Rob",
@@ -93,19 +90,8 @@ NAMES.forEach((nm) => {
   d.addEventListener("click", () => toggle(nm, d));
   grid.appendChild(d);
 
-  /* 没有 _idle 的，退回 <名字>_32x32.png 的第一格（那是 48×9 的大合集，一格 32×32） */
   const probe = new Image();
-  probe.onerror = () => {
-    const alt = BASE + nm + "_32x32.png";
-    const p2 = new Image();
-    p2.onload = () => {
-      f.style.backgroundSize = "256px 96px";   /* 1536×576 缩到 1/6 */
-      f.style.backgroundPosition = "0 -32px";
-      f.style.backgroundImage = "url(\"" + alt + "\")";
-    };
-    p2.onerror = () => { d.classList.add("dead"); d.style.pointerEvents = "none"; };
-    p2.src = alt;
-  };
+  probe.onerror = () => { d.classList.add("dead"); d.style.pointerEvents = "none"; };
   probe.src = url;
 });
 
