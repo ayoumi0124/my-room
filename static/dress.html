@@ -24,27 +24,28 @@
                      linear-gradient(45deg,#24222e 25%,transparent 25%,transparent 75%,#24222e 75%);
     background-size:16px 16px;background-position:0 0,8px 8px}
   .zoombar{display:flex;gap:6px;margin-top:8px;justify-content:center;flex-wrap:wrap}
-  .layers{flex:1 1 260px;min-width:240px;display:flex;flex-direction:column;gap:8px}
+  .layers{flex:1 1 280px;min-width:250px;display:flex;flex-direction:column;gap:8px}
   .lay{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
   .lay h2{margin:0 0 6px;font-size:12.5px;font-weight:600;color:var(--hot)}
-  .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .row{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
   .row + .row{margin-top:6px}
   select,input,button{font:inherit;background:#11101a;color:var(--ink);
     border:1px solid var(--line);border-radius:8px;padding:6px 8px}
-  input[type=number]{width:56px}
-  .row label{color:var(--dim);font-size:12px}
+  input[type=number]{width:52px}
+  .row label{color:var(--dim);font-size:12px;white-space:nowrap}
   .on{background:#3a4a63;border-color:#4a5f80}
+  .chk{display:flex;align-items:center;gap:5px;color:var(--dim);font-size:12px;white-space:nowrap}
   .out{padding:0 12px 24px}
-  textarea{width:100%;height:132px;background:#11101a;color:#b8f0c0;
+  textarea{width:100%;height:180px;background:#11101a;color:#b8f0c0;
     border:1px solid var(--line);border-radius:8px;padding:8px;
     font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;resize:vertical}
 </style>
 </head>
 <body>
 <header>
-  <h1>换装台 <small>四层叠起来看</small></h1>
-  <div class="hint">顺序：<b>身体 → 衣服 → 头发 → 眼睛</b>。每层各选一张、各填行列。<br>
-  <b>没对齐就手动挪</b>：每层下面那两个「挪 X / 挪 Y」是按原图像素算的，正数往右下。<br>
+  <h1>换装台 <small>叠起来看</small></h1>
+  <div class="hint">顺序：<b>身体 → 衣服 → 头发 → 眼睛</b>。每层选一张、填一格，还能加<b>第二块</b>（有些头发跨两格）。<br>
+  <b>挪X / 挪Y</b> 按原图像素算，正数往右下；一格 = 32。<br>
   现有：身体 9 / 眼睛 7 / 头发 29 / 衣服 33（2026-10-11 点的数）。</div>
 </header>
 
@@ -62,19 +63,18 @@
 "use strict";
 /* ============================================================
    换装台 · dress
-   四层各选一张表 + 一格 + 自己的偏移，实时叠合
-   偏移单位 = 原图 32×32 像素（正数往右下）
-   头发一般得往上挪一格（Y = -32），因为发型越过格子顶边
+   每层 = 一张表 + 第一块（行/列/挪X/挪Y）+ 可选第二块（行/列/挪X/挪Y）
+   偏移单位 = 原图 32×32 像素
    素材：Tiles by LimeZu — https://limezu.itch.io/
    ============================================================ */
 
 const CG = "tiles/2_Characters/Character_Generator/";
 
 const LAYERS = [
-  { key: "body",   title: "① 身体 Body（9 个肤色）", dir: "Bodies/32x32/",     prefix: "Body_32x32_",     count: 9,  row: 1, col: 3, dx: 0,  dy: 0 },
-  { key: "outfit", title: "② 衣服 Outfit（33 件）",  dir: "Outfits/32x32/",    prefix: "Outfit_",         count: 33, row: 1, col: 3, dx: 0,  dy: 0, suffix: "_32x32_01" },
-  { key: "hair",   title: "③ 头发 Hair（29 种）",    dir: "Hairstyles/32x32/", prefix: "Hairstyle_",      count: 29, row: 0, col: 3, dx: 0,  dy: -32, suffix: "_32x32_01" },
-  { key: "eyes",   title: "④ 眼睛 Eyes（7 种）",     dir: "Eyes/32x32/",       prefix: "Eyes_32x32_",     count: 7,  row: 1, col: 3, dx: 0,  dy: 0 }
+  { key: "body",   title: "① 身体 Body（9 个肤色）", dir: "Bodies/32x32/",     prefix: "Body_32x32_", count: 9,  p1: { row: 1, col: 3, dx: 0,  dy: 0 },  p2: null },
+  { key: "outfit", title: "② 衣服 Outfit（33 件）",  dir: "Outfits/32x32/",    prefix: "Outfit_",     count: 33, p1: { row: 1, col: 3, dx: 0,  dy: 0 },  p2: null, suffix: "_32x32_01" },
+  { key: "hair",   title: "③ 头发 Hair（29 种）",    dir: "Hairstyles/32x32/", prefix: "Hairstyle_",  count: 29, p1: { row: 8, col: 3, dx: 0,  dy: -32 }, p2: { row: 9, col: 3, dx: 0, dy: 0 }, suffix: "_32x32_01" },
+  { key: "eyes",   title: "④ 眼睛 Eyes（7 种）",     dir: "Eyes/32x32/",       prefix: "Eyes_32x32_", count: 7,  p1: { row: 1, col: 3, dx: 0,  dy: 0 },  p2: null }
 ];
 
 const CELL = 32;
@@ -113,7 +113,12 @@ function optionsFor(L) {
 const state = {};
 
 LAYERS.forEach((L) => {
-  state[L.key] = { L, file: optionsFor(L)[0], row: L.row, col: L.col, dx: L.dx, dy: L.dy };
+  state[L.key] = {
+    L, file: optionsFor(L)[0],
+    p1: Object.assign({}, L.p1),
+    p2: L.p2 ? Object.assign({}, L.p2) : { row: 0, col: 3, dx: 0, dy: 32 },
+    use2: !!L.p2
+  };
 
   const box = document.createElement("div");
   box.className = "lay";
@@ -121,7 +126,7 @@ LAYERS.forEach((L) => {
   const h = document.createElement("h2");
   h.textContent = L.title;
 
-  /* 第一行：选文件 */
+  /* 选文件 */
   const r1 = document.createElement("div");
   r1.className = "row";
   const sel = document.createElement("select");
@@ -133,22 +138,38 @@ LAYERS.forEach((L) => {
   sel.addEventListener("change", () => { state[L.key].file = sel.value; draw(); });
   r1.appendChild(sel);
 
-  /* 第二行：行 / 列 / 挪 X / 挪 Y */
+  /* 第一块 */
   const r2 = document.createElement("div");
   r2.className = "row";
-  function num(label, val, on) {
+  const t1 = document.createElement("label"); t1.textContent = "①"; r2.appendChild(t1);
+  function num(parent, label, get, set, step) {
     const lb = document.createElement("label"); lb.textContent = label;
     const inp = document.createElement("input");
-    inp.type = "number"; inp.value = String(val);
-    inp.addEventListener("input", () => on(Number(inp.value) || 0));
-    r2.appendChild(lb); r2.appendChild(inp);
+    inp.type = "number"; inp.value = String(get());
+    inp.addEventListener("input", () => { set(Number(inp.value) || 0); draw(); });
+    parent.appendChild(lb); parent.appendChild(inp);
   }
-  num("行", L.row, (v) => { state[L.key].row = v; draw(); });
-  num("列", L.col, (v) => { state[L.key].col = v; draw(); });
-  num("挪X", L.dx, (v) => { state[L.key].dx = v; draw(); });
-  num("挪Y", L.dy, (v) => { state[L.key].dy = v; draw(); });
+  num(r2, "行", () => state[L.key].p1.row, (v) => state[L.key].p1.row = v);
+  num(r2, "列", () => state[L.key].p1.col, (v) => state[L.key].p1.col = v);
+  num(r2, "挪X", () => state[L.key].p1.dx, (v) => state[L.key].p1.dx = v);
+  num(r2, "挪Y", () => state[L.key].p1.dy, (v) => state[L.key].p1.dy = v);
 
-  box.appendChild(h); box.appendChild(r1); box.appendChild(r2);
+  /* 第二块 */
+  const r3 = document.createElement("div");
+  r3.className = "row";
+  const chk = document.createElement("input");
+  chk.type = "checkbox"; chk.checked = state[L.key].use2;
+  chk.addEventListener("change", () => { state[L.key].use2 = chk.checked; draw(); });
+  const chkl = document.createElement("label"); chkl.className = "chk";
+  chkl.appendChild(chk);
+  const chkt = document.createElement("span"); chkt.textContent = "加第二块 ②"; chkl.appendChild(chkt);
+  r3.appendChild(chkl);
+  num(r3, "行", () => state[L.key].p2.row, (v) => state[L.key].p2.row = v);
+  num(r3, "列", () => state[L.key].p2.col, (v) => state[L.key].p2.col = v);
+  num(r3, "挪X", () => state[L.key].p2.dx, (v) => state[L.key].p2.dx = v);
+  num(r3, "挪Y", () => state[L.key].p2.dy, (v) => state[L.key].p2.dy = v);
+
+  box.appendChild(h); box.appendChild(r1); box.appendChild(r2); box.appendChild(r3);
   layersEl.appendChild(box);
 });
 
@@ -164,10 +185,15 @@ VIEWS.forEach((v, i) => {
   zoombar.appendChild(b);
 });
 
-/* 以「身体」层的格子为中心，各层按自己的偏移叠上去 */
+function piece(st, img, p, cx, cy, s) {
+  if (!img.ok) return;
+  sctx.drawImage(img.el,
+    p.col * CELL, p.row * CELL, CELL, CELL,
+    cx + p.dx * s, cy + p.dy * s, CELL * s, CELL * s);
+}
+
 function draw() {
   const view = VIEWS[viewIdx];
-  const half = Math.floor(view / 2);
   const span = view * CELL;
   const s = stage.width / span;
   const cx = stage.width  / 2 - CELL * s / 2;
@@ -177,7 +203,7 @@ function draw() {
   sctx.clearRect(0, 0, stage.width, stage.height);
   sctx.imageSmoothingEnabled = false;
 
-  /* 参考网格 + 中心那一格的黄框 */
+  /* 参考网格 + 中心黄框 */
   sctx.strokeStyle = "rgba(255,255,255,.09)";
   sctx.lineWidth = 1;
   for (let i = 0; i <= view; i++) {
@@ -185,27 +211,26 @@ function draw() {
     sctx.beginPath(); sctx.moveTo(p, 0); sctx.lineTo(p, stage.height); sctx.stroke();
     sctx.beginPath(); sctx.moveTo(0, p); sctx.lineTo(stage.width, p); sctx.stroke();
   }
-  sctx.strokeStyle = "rgba(255,214,150,.55)";
+  sctx.strokeStyle = "rgba(255,214,150,.5)";
   sctx.lineWidth = 2;
   sctx.strokeRect(cx, cy, CELL * s, CELL * s);
 
+  const lines = [];
   for (const L of LAYERS) {
     const st = state[L.key];
-    const e = getImg(st.file);
-    if (!e.ok) continue;
-    sctx.drawImage(e.el,
-      st.col * CELL, st.row * CELL, CELL, CELL,
-      cx + st.dx * s, cy + st.dy * s, CELL * s, CELL * s);
-  }
+    const im = getImg(st.file);
+    piece(st, im, st.p1, cx, cy, s);
+    if (st.use2) piece(st, im, st.p2, cx, cy, s);
 
-  const lines = LAYERS.map((L) => {
-    const st = state[L.key];
-    return (L.key + ":").padEnd(8) + " " + st.file.split("/").pop() +
-           "   行 " + st.row + " 列 " + st.col +
-           "   挪X " + st.dx + " 挪Y " + st.dy;
-  });
+    const fn = st.file.split("/").pop();
+    let line = (L.key + ":").padEnd(8) + " " + fn +
+               "  ①行" + st.p1.row + " 列" + st.p1.col + " 挪" + st.p1.dx + "/" + st.p1.dy;
+    if (st.use2) line += "  ②行" + st.p2.row + " 列" + st.p2.col + " 挪" + st.p2.dx + "/" + st.p2.dy;
+    lines.push(line);
+  }
   const ok = LAYERS.filter((L) => getImg(state[L.key].file).ok).length;
-  outEl.value = lines.join("\n") + "\n\n叠上了 " + ok + "/4 层 · 视野 " + view + " 格";
+  outEl.value = "/* 复制整段发给清泽 */\n" + lines.join("\n") +
+                "\n\n叠上了 " + ok + "/4 层 · 视野 " + view + " 格";
 }
 
 draw();
