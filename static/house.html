@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#14131a">
-<title>我们家 · v3.4</title>
+<title>我们家 · v3.5</title>
 <style>
   html,body{margin:0;height:100%;background:#14131a;overflow:hidden;
     -webkit-user-select:none;user-select:none;touch-action:none;
@@ -18,13 +18,15 @@
 <script>
 "use strict";
 /* ============================================================
-   我们家 · v3.4
+   我们家 · v3.5
    v3.0 家具贴图 / v3.1 修拉伸 / v3.2 接入 Exteriors / v3.2.1 花园重排
-   v3.3 人物换成 Old 那套成品角色（Molly + Alex）
-   v3.4（2026-10-11）：人物改成「四层拼装」——
-         身体 + 衣服 + 头发 + 眼睛，叠出来（见 HOW_TO_CHARACTER_GENERATOR.png）
-         好处：人不变，衣服能换。点一下宁宁就换一件。
-         坐标：角色生成器的大表里，「正面站立」= 第 1 行 第 3 列（一格 32×32）
+   v3.3 人物换成品角色 / v3.4 人物改四层拼装
+   v3.5（2026-10-11 晚）：坐标定死了 —— 和宁宁在换装台上一起磨了两个小时
+     叠放顺序照 CHARACTER_GENERATOR.txt：身体 → 眼睛 → 衣服 → 头发
+     正面站立           = 第 1 行 第 3 列
+     头发顶上那一撮     = 第 0 行 第 3 列（往上提一格，挪Y = -32）
+     头发是两块：① 行0列3（挪上去） + ② 行1列3（不动）
+     点一下宁宁换一件衣服
    数据源：GET /home 和 GET /messages
    素材：Tiles by LimeZu — https://limezu.itch.io/
    ============================================================ */
@@ -55,38 +57,39 @@ const src = (c, n) => { const t = CAT[c]; return BASE[t.b] + t.d + t.p + n + ".p
 
 /* ---------- 人物：四层拼装 ---------- */
 const CG = "tiles/2_Characters/Character_Generator/";
-/* 大表里「正面站立」那一格 */
-const CELL_COL = 3, CELL_ROW = 1, CELL_W = 32, CELL_H = 32;
-/* 显示尺寸（32×32 放大 1.75 倍） */
-const DISP = 56;
+const CELLW = 32, CELLH = 32;
+const COL_FRONT = 3;      /* 正面站立那一列 */
+const ROW_FRONT = 1;      /* 正面站立那一行 */
+const ROW_HAIRTOP = 0;    /* 头发顶上那撮（要往上提一格） */
+const DISP = 48;          /* 每格显示成 48×48；整个人 48 宽 × 96 高 */
 
-/* 每层一个文件；换衣服就是换 outfit 那一条 */
 const NING = {
-  body:   "Bodies/32x32/Body_32x32_01.png",
+  body:   "Bodies/32x32/Body_32x32_03.png",
   eyes:   "Eyes/32x32/Eyes_32x32_01.png",
-  hair:   "Hairstyles/32x32/Hairstyle_02_32x32_01.png",
-  outfit: "Outfit_01"
+  hair:   "Hairstyles/32x32/Hairstyle_18_32x32_01.png",
+  outfit: "Outfit_02"
 };
 const QZ = {
-  body:   "Bodies/32x32/Body_32x32_05.png",
+  body:   "Bodies/32x32/Body_32x32_06.png",
   eyes:   "Eyes/32x32/Eyes_32x32_01.png",
   hair:   "Hairstyles/32x32/Hairstyle_01_32x32_01.png",
-  outfit: "Outfit_04"
+  outfit: "Outfit_08"
 };
-/* 能换的衣服（加载不到的自动跳过） */
+
+/* 能换的衣服（33 件，2026-10-11 在服务器上点过） */
 const OUTFITS = [];
-for (let i = 1; i <= 20; i++) OUTFITS.push("Outfit_" + String(i).padStart(2, "0"));
-let ningOutfitIdx = 0;
+for (let i = 1; i <= 33; i++) OUTFITS.push("Outfit_" + String(i).padStart(2, "0"));
+let ningOutfitIdx = 1 % OUTFITS.length;   /* 从 Outfit_02 起（就是定下来那件） */
 
 function outfitPath(key) { return "Outfits/32x32/" + key + "_32x32_01.png"; }
 
 /* ---------- 图片缓存 ---------- */
 const IMG = Object.create(null);
-function load(u) {
-  let e = IMG[u];
+function loadCG(u) {
+  let e = IMG["#" + u];
   if (!e) {
     const im = new Image();
-    e = IMG[u] = { el: im, ok: false };
+    e = IMG["#" + u] = { el: im, ok: false };
     im.onload  = () => { e.ok = true; };
     im.onerror = () => { e.ok = false; };
     im.src = CG + u;
@@ -116,7 +119,7 @@ ctx.imageSmoothingEnabled = false;
 const ROOMS = {
   living: {
     name: "客厅", wall: ["#efe1cd", "#e3d2ba"], floor: ["#d8b98e", "#c8a575"],
-    line: "rgba(150,118,80,.35)", qz: { x: 170, y: 316 }, cat: { x: 86, y: 470 },
+    line: "rgba(150,118,80,.35)", qz: { x: 170, y: 326 }, cat: { x: 86, y: 480 },
     floorArt: [
       { c: "bedroom", n: 383, x: 92, y: 392, w: 176, h: 124, stretch: true }
     ],
@@ -130,7 +133,7 @@ const ROOMS = {
   },
   study: {
     name: "书房", wall: ["#e7e1d3", "#d9d1c0"], floor: ["#c9b699", "#b8a37f"],
-    line: "rgba(130,105,70,.35)", qz: { x: 258, y: 336 }, cat: { x: 300, y: 470 },
+    line: "rgba(130,105,70,.35)", qz: { x: 258, y: 346 }, cat: { x: 300, y: 480 },
     floorArt: [
       { c: "bedroom", n: 385, x: 96, y: 392, w: 172, h: 122, stretch: true }
     ],
@@ -143,7 +146,7 @@ const ROOMS = {
   },
   kitchen: {
     name: "厨房", wall: ["#e9efd6", "#dbe4c2"], floor: ["#ded5c4", "#cdc2ac"],
-    line: "rgba(140,120,90,.3)", qz: { x: 96, y: 326 }, cat: { x: 300, y: 468 },
+    line: "rgba(140,120,90,.3)", qz: { x: 96, y: 336 }, cat: { x: 300, y: 478 },
     floorArt: [
       { c: "bedroom", n: 388, x: 94, y: 392, w: 176, h: 122, stretch: true }
     ],
@@ -158,14 +161,14 @@ const ROOMS = {
   },
   garden: {
     name: "花园", wall: ["#cfe6c4", "#b0d69e"], floor: ["#95c476", "#7fb262"],
-    line: "rgba(80,130,60,.35)", qz: { x: 180, y: 316 }, cat: { x: 108, y: 440 },
+    line: "rgba(80,130,60,.35)", qz: { x: 180, y: 326 }, cat: { x: 108, y: 450 },
     floorArt: [],
     furn: [
       { c: "garden", n: "Big_Sunflower",   x: 8,   y: 330, w: 62, h: 72 },
       { c: "garden", n: "Angel_Statue_1",  x: 96,  y: 346, w: 46, h: 70 },
       { c: "garden", n: "Big_Pink_Flower", x: 290, y: 330, w: 62, h: 72 },
-      { c: "garden", n: "Bush_Potted_1",   x: 20,  y: 488, w: 44, h: 54 },
-      { c: "garden", n: "Bush_Potted_3",   x: 296, y: 488, w: 44, h: 54 }
+      { c: "garden", n: "Bush_Potted_1",   x: 20,  y: 490, w: 44, h: 54 },
+      { c: "garden", n: "Bush_Potted_3",   x: 296, y: 490, w: 44, h: 54 }
     ]
   }
 };
@@ -198,9 +201,9 @@ function solidsOf(id) {
           .map(o => ({ x: o.x + 4, y: o.y + o.h * 0.45, w: o.w - 8, h: o.h * 0.55 }));
 }
 
-const ning = { x: 180, y: 516, face: -1, step: 0 };
-const qz   = { x: 170, y: 316, face: 1 };
-const cat  = { x: 86,  y: 470, face: 1 };
+const ning = { x: 180, y: 526, face: -1, step: 0 };
+const qz   = { x: 170, y: 326, face: 1 };
+const cat  = { x: 86,  y: 480, face: 1 };
 let cur = LIVING_ID;
 
 let HOME = {
@@ -266,9 +269,8 @@ function ningOutfit() { return OUTFITS[ningOutfitIdx % OUTFITS.length]; }
     (R.floorArt || []).forEach(o => img(o.c, o.n));
     (R.furn || []).forEach(o => img(o.c, o.n));
   }
-  Object.keys(NING).forEach(k => { if (k !== "outfit") load(NING[k]); });
-  Object.keys(QZ).forEach(k => { if (k !== "outfit") load(QZ[k]); });
-  OUTFITS.forEach(o => load(outfitPath(o)));
+  ["body", "eyes", "hair"].forEach(k => { loadCG(NING[k]); loadCG(QZ[k]); });
+  OUTFITS.forEach(o => loadCG(outfitPath(o)));
 })();
 
 const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
@@ -297,7 +299,7 @@ let fade = 0, pending = null;
 function gotoRoom(id) { if (id !== cur && !pending) pending = id; }
 function doSwitch(id) {
   cur = id;
-  ning.x = 180; ning.y = 512; ning.step = 0;
+  ning.x = 180; ning.y = 522; ning.step = 0;
   qz.x = ROOMS[id].qz.x;   qz.y = ROOMS[id].qz.y;
   cat.x = ROOMS[id].cat.x; cat.y = ROOMS[id].cat.y;
   target = null;
@@ -339,8 +341,8 @@ cv.addEventListener("pointerup", release);
 cv.addEventListener("pointercancel", release);
 cv.addEventListener("pointerleave", release);
 
-function onNing(p) { return Math.abs(p.x - ning.x) < 24 && p.y > ning.y - 70 && p.y < ning.y + 8; }
-function nearQz(p) { return HOME.roomId === cur && Math.abs(p.x - qz.x) < 34 && p.y > qz.y - 70 && p.y < qz.y + 14; }
+function onNing(p) { return Math.abs(p.x - ning.x) < 26 && p.y > ning.y - 100 && p.y < ning.y + 8; }
+function nearQz(p) { return HOME.roomId === cur && Math.abs(p.x - qz.x) < 30 && p.y > qz.y - 100 && p.y < qz.y + 14; }
 function doorUnder(p) {
   if (p.y > WALL_Y + 22) return null;
   for (const d of doorsOf(cur)) if (p.x > d.x - 10 && p.x < d.x + d.w + 10) return d;
@@ -355,7 +357,7 @@ let bubble = null, bubbleUntil = 0, lineIdx = 0;
 function say(t, ms) { bubble = t; bubbleUntil = performance.now() + (ms || 3600); }
 function tryTalk() {
   if (HOME.roomId !== cur) { say("清泽在" + HOME.roomName + "，" + HOME.doing + "。你上那边找他。"); return; }
-  if (Math.hypot(ning.x - qz.x, ning.y - qz.y) > 62) { say("你走近点，清泽听不见。", 2200); return; }
+  if (Math.hypot(ning.x - qz.x, ning.y - qz.y) > 76) { say("你走近点，清泽听不见。", 2200); return; }
   say(String(LINES[lineIdx % LINES.length]).slice(0, 90), 4200);
   lineIdx++;
 }
@@ -439,25 +441,27 @@ function drawGhostFurn(o) {
   ctx.restore();
 }
 
-/* ---------- 人物：四层叠 ----------
-   顺序（照说明图）：身体 → 衣服 → 头发 → 眼睛
-   每层都取同一格（第 CELL_ROW 行 第 CELL_COL 列）
+/* ---------- 人物 ----------
+   顺序照 CHARACTER_GENERATOR.txt： 身体 → 眼睛 → 衣服 → 头发
+   每块：从图里抠一格（row, col），贴到 (x, y) 为底边中心的位置
+   lift = 往上提几格（头发顶上那撮要提一格）
 ------------------------------ */
-function layerPiece(u, x, y) {
-  const e = load(u);
+function piece(u, row, col, lift, x, y) {
+  const e = loadCG(u);
   if (!e.ok) return false;
   ctx.drawImage(e.el,
-    CELL_COL * CELL_W, CELL_ROW * CELL_H, CELL_W, CELL_H,
-    x - DISP / 2, y - DISP, DISP, DISP);
+    col * CELLW, row * CELLH, CELLW, CELLH,
+    x - DISP / 2, y - DISP * (1 + lift), DISP, DISP);
   return true;
 }
 function drawPerson(P, outfitKey, x, y, bob) {
   ctx.save();
   ctx.translate(0, bob || 0);
-  layerPiece(P.body, x, y);
-  if (outfitKey) layerPiece(outfitPath(outfitKey), x, y);
-  layerPiece(P.hair, x, y);
-  layerPiece(P.eyes, x, y);
+  piece(P.body, ROW_FRONT, COL_FRONT, 0, x, y);
+  piece(P.eyes, ROW_FRONT, COL_FRONT, 0, x, y);
+  if (outfitKey) piece(outfitPath(outfitKey), ROW_FRONT, COL_FRONT, 0, x, y);
+  piece(P.hair, ROW_HAIRTOP, COL_FRONT, 1, x, y);   /* 顶上那撮，往上一格 */
+  piece(P.hair, ROW_FRONT, COL_FRONT, 0, x, y);     /* 脸周围那圈，含刘海 */
   ctx.restore();
 }
 
@@ -629,7 +633,6 @@ function frame(now) {
   drawRoom();
   drawFloorArt();
 
-  /* 走路时轻轻颠一下，暂时还没切腿的帧 */
   const bob = ning.step > 0 ? Math.sin(ning.step * 2) * 1.6 : 0;
 
   const actors = [];
@@ -640,12 +643,12 @@ function frame(now) {
   if (HOME.roomId === cur)    actors.push({ y: qz.y,  f: () => {
       shadow(qz.x, qz.y, 13, 4);
       drawPerson(QZ, QZ.outfit, qz.x, qz.y, 0);
-      tag(qz.x, qz.y - 72, "清泽", false);
+      tag(qz.x, qz.y - 100, "清泽", false);
   }});
   actors.push({ y: ning.y, f: () => {
       shadow(ning.x, ning.y, 12, 4);
       drawPerson(NING, ningOutfit(), ning.x, ning.y, bob);
-      tag(ning.x, ning.y - 72, "宁宁", true);
+      tag(ning.x, ning.y - 100, "宁宁", true);
   }});
   actors.sort((a, b) => a.y - b.y).forEach(a => a.f());
 
@@ -653,7 +656,7 @@ function frame(now) {
   if (dn && !bubble) prompt(dn.cx, WALL_Y + 10, "点门 · 去" + ROOMS[dn.id].name);
 
   if (bubble && now < bubbleUntil) {
-    drawBubble((HOME.roomId === cur) ? qz.x : 180, (HOME.roomId === cur) ? qz.y - 84 : 150, bubble);
+    drawBubble((HOME.roomId === cur) ? qz.x : 180, (HOME.roomId === cur) ? qz.y - 112 : 150, bubble);
   }
 
   drawHUD(now);
