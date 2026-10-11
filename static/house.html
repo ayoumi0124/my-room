@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#14131a">
-<title>我们家 · v3.5</title>
+<title>我们家 · v3.6</title>
 <style>
   html,body{margin:0;height:100%;background:#14131a;overflow:hidden;
     -webkit-user-select:none;user-select:none;touch-action:none;
@@ -18,14 +18,16 @@
 <script>
 "use strict";
 /* ============================================================
-   我们家 · v3.5
+   我们家 · v3.6
    v3.0 家具贴图 / v3.1 修拉伸 / v3.2 接入 Exteriors / v3.2.1 花园重排
-   v3.3 人物换成品角色 / v3.4 人物改四层拼装
-   v3.5（2026-10-11 晚）：坐标定死了 —— 和宁宁在换装台上一起磨出来的
+   v3.3 人物换成品角色 / v3.4 人物改四层拼装 / v3.5 坐标定案
+   v3.6（2026-10-11 晚）：人物会转身了 —— 四个方向各一列
      叠放顺序照 CHARACTER_GENERATOR.txt：身体 → 眼睛 → 衣服 → 头发
-     正面站立        = 第 1 行 第 3 列
-     头发顶上那一撮  = 第 0 行 第 3 列（往上提一格）
-     头发是两块：① 行0列3（提上去） + ② 行1列3（不动，含刘海）
+     四个方向（一格 32×32，都在第 1 行）：
+        列0 = 朝左   列1 = 背面   列2 = 朝右   列3 = 正面
+     （列0/列2 哪个是左，是宁宁看「四个方向」那条认出来的；
+       要是反了，把 DIR.left 和 DIR.right 那两个数对调就行）
+     头发顶上那撮在第 0 行、同一列，往上提一格
      宁宁 = 粉头发（Hairstyle_28）   清泽 = 棕头发（Hairstyle_18）
      点一下宁宁换一件衣服
    数据源：GET /home 和 GET /messages
@@ -59,10 +61,12 @@ const src = (c, n) => { const t = CAT[c]; return BASE[t.b] + t.d + t.p + n + ".p
 /* ---------- 人物：四层拼装 ---------- */
 const CG = "tiles/2_Characters/Character_Generator/";
 const CELLW = 32, CELLH = 32;
-const COL_FRONT = 3;      /* 正面站立那一列 */
-const ROW_FRONT = 1;      /* 正面站立那一行 */
+const ROW_FRONT = 1;      /* 站着不动的那一排 */
 const ROW_HAIRTOP = 0;    /* 头发顶上那撮（要往上提一格） */
-const DISP = 48;          /* 每格显示成 48×48；整个人 48 宽 × 96 高 */
+const DISP = 48;
+
+/* 四个方向对应第 1 行的第几列 */
+const DIR = { left: 0, back: 1, right: 2, front: 3 };
 
 const NING = {
   body:   "Bodies/32x32/Body_32x32_02.png",
@@ -80,7 +84,7 @@ const QZ = {
 /* 能换的衣服（33 件，2026-10-11 在服务器上点过） */
 const OUTFITS = [];
 for (let i = 1; i <= 33; i++) OUTFITS.push("Outfit_" + String(i).padStart(2, "0"));
-let ningOutfitIdx = 12;                   /* 从 Outfit_13 起 —— 就是定下来那件 */
+let ningOutfitIdx = 12;                   /* 从 Outfit_13 起 */
 
 function outfitPath(key) { return "Outfits/32x32/" + key + "_32x32_01.png"; }
 
@@ -202,8 +206,8 @@ function solidsOf(id) {
           .map(o => ({ x: o.x + 4, y: o.y + o.h * 0.45, w: o.w - 8, h: o.h * 0.55 }));
 }
 
-const ning = { x: 180, y: 526, face: -1, step: 0 };
-const qz   = { x: 170, y: 326, face: 1 };
+const ning = { x: 180, y: 526, dir: "front", step: 0 };
+const qz   = { x: 170, y: 326, dir: "front" };
 const cat  = { x: 86,  y: 480, face: 1 };
 let cur = LIVING_ID;
 
@@ -300,8 +304,8 @@ let fade = 0, pending = null;
 function gotoRoom(id) { if (id !== cur && !pending) pending = id; }
 function doSwitch(id) {
   cur = id;
-  ning.x = 180; ning.y = 522; ning.step = 0;
-  qz.x = ROOMS[id].qz.x;   qz.y = ROOMS[id].qz.y;
+  ning.x = 180; ning.y = 522; ning.step = 0; ning.dir = "front";
+  qz.x = ROOMS[id].qz.x;   qz.y = ROOMS[id].qz.y; qz.dir = "front";
   cat.x = ROOMS[id].cat.x; cat.y = ROOMS[id].cat.y;
   target = null;
 }
@@ -391,7 +395,10 @@ function update(dt) {
     const sx = dx * SPEED * dt, sy = dy * SPEED * dt;
     if (!blocked(ning.x + sx, ning.y)) ning.x += sx;
     if (!blocked(ning.x, ning.y + sy)) ning.y += sy;
-    if (Math.abs(dx) > 0.15) ning.face = dx > 0 ? 1 : -1;
+    /* 转身：横着走优先朝左右，纯上下走就背过身/正面朝下 */
+    if (Math.abs(dx) > 0.35) ning.dir = dx > 0 ? "right" : "left";
+    else if (dy < -0.35) ning.dir = "back";
+    else if (dy > 0.35) ning.dir = "front";
     ning.step += dt * 9;
   } else ning.step = 0;
 
@@ -405,7 +412,12 @@ function update(dt) {
     }
     cat.face = ning.x >= cat.x ? 1 : -1;
   }
-  if (HOME.roomId === cur) qz.face = ning.x >= qz.x ? 1 : -1;
+  /* 清泽看着你：你在左他就朝左，在右就朝右 */
+  if (HOME.roomId === cur) {
+    const ddx = ning.x - qz.x, ddy = ning.y - qz.y;
+    if (Math.abs(ddx) > Math.abs(ddy) * 0.8) qz.dir = ddx > 0 ? "right" : "left";
+    else qz.dir = ddy > 0 ? "front" : "back";
+  }
 }
 
 function rr(x, y, w, h, r) {
@@ -444,7 +456,7 @@ function drawGhostFurn(o) {
 
 /* ---------- 人物 ----------
    顺序照 CHARACTER_GENERATOR.txt： 身体 → 眼睛 → 衣服 → 头发
-   每块从图里抠一格（row, col），底边中心贴在 (x, y)
+   每块从图里抠一格（row, 列按方向），底边中心贴在 (x, y)
    lift = 往上提几格（头发顶上那撮要提一格）
 ------------------------------ */
 function piece(u, row, col, lift, x, y) {
@@ -455,14 +467,15 @@ function piece(u, row, col, lift, x, y) {
     x - DISP / 2, y - DISP * (1 + lift), DISP, DISP);
   return true;
 }
-function drawPerson(P, outfitKey, x, y, bob) {
+function drawPerson(P, outfitKey, dir, x, y, bob) {
+  const c = DIR[dir] === undefined ? DIR.front : DIR[dir];
   ctx.save();
   ctx.translate(0, bob || 0);
-  piece(P.body, ROW_FRONT, COL_FRONT, 0, x, y);
-  piece(P.eyes, ROW_FRONT, COL_FRONT, 0, x, y);
-  if (outfitKey) piece(outfitPath(outfitKey), ROW_FRONT, COL_FRONT, 0, x, y);
-  piece(P.hair, ROW_HAIRTOP, COL_FRONT, 1, x, y);   /* 顶上那撮，往上一格 */
-  piece(P.hair, ROW_FRONT, COL_FRONT, 0, x, y);     /* 脸周围那圈，含刘海 */
+  piece(P.body, ROW_FRONT, c, 0, x, y);
+  piece(P.eyes, ROW_FRONT, c, 0, x, y);
+  if (outfitKey) piece(outfitPath(outfitKey), ROW_FRONT, c, 0, x, y);
+  piece(P.hair, ROW_HAIRTOP, c, 1, x, y);   /* 顶上那撮，往上一格 */
+  piece(P.hair, ROW_FRONT, c, 0, x, y);     /* 脸周围那圈，含刘海 */
   ctx.restore();
 }
 
@@ -643,12 +656,12 @@ function frame(now) {
   if (HOME.catRoomId === cur) actors.push({ y: cat.y, f: () => drawCat(cat.x, cat.y) });
   if (HOME.roomId === cur)    actors.push({ y: qz.y,  f: () => {
       shadow(qz.x, qz.y, 13, 4);
-      drawPerson(QZ, QZ.outfit, qz.x, qz.y, 0);
+      drawPerson(QZ, QZ.outfit, qz.dir, qz.x, qz.y, 0);
       tag(qz.x, qz.y - 100, "清泽", false);
   }});
   actors.push({ y: ning.y, f: () => {
       shadow(ning.x, ning.y, 12, 4);
-      drawPerson(NING, ningOutfit(), ning.x, ning.y, bob);
+      drawPerson(NING, ningOutfit(), ning.dir, ning.x, ning.y, bob);
       tag(ning.x, ning.y - 100, "宁宁", true);
   }});
   actors.sort((a, b) => a.y - b.y).forEach(a => a.f());
