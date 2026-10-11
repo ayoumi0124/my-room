@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>换装台 · dress</title>
+<style>
+  :root{--bg:#14131a;--card:#1e1c26;--line:#2e2b38;--ink:#e8e2ee;--dim:#9d94a6;--hot:#ffd696}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.5 -apple-system,"PingFang SC","Noto Sans SC",system-ui,sans-serif}
+  header{position:sticky;top:0;z-index:5;background:rgba(20,19,26,.97);
+    border-bottom:1px solid var(--line);padding:10px 12px}
+  h1{margin:0 0 8px;font-size:15px;font-weight:600}
+  h1 small{color:var(--dim);font-weight:400;font-size:12px;margin-left:6px}
+  .hint{color:var(--dim);font-size:12px}
+  .hint b{color:var(--hot)}
+  .stagewrap{display:flex;gap:14px;align-items:flex-start;padding:12px;flex-wrap:wrap}
+  .stage{image-rendering:pixelated;border:1px solid var(--line);border-radius:10px;
+    width:192px;height:192px;flex:0 0 auto;
+    background-color:#1a1822;
+    background-image:linear-gradient(45deg,#24222e 25%,transparent 25%,transparent 75%,#24222e 75%),
+                     linear-gradient(45deg,#24222e 25%,transparent 25%,transparent 75%,#24222e 75%);
+    background-size:16px 16px;background-position:0 0,8px 8px}
+  .layers{flex:1 1 260px;min-width:240px;display:flex;flex-direction:column;gap:8px}
+  .lay{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+  .lay h2{margin:0 0 6px;font-size:12.5px;font-weight:600;color:var(--hot)}
+  .row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  select,input,button{font:inherit;background:#11101a;color:var(--ink);
+    border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+  input[type=number]{width:60px}
+  .row label{color:var(--dim);font-size:12px}
+  .out{padding:0 12px 24px}
+  textarea{width:100%;height:96px;background:#11101a;color:#b8f0c0;
+    border:1px solid var(--line);border-radius:8px;padding:8px;
+    font:12px/1.45 ui-monospace,Menlo,Consolas,monospace;resize:vertical}
+</style>
+</head>
+<body>
+<header>
+  <h1>换装台 <small>四层叠起来看</small></h1>
+  <div class="hint">顺序：<b>身体 → 衣服 → 头发 → 眼睛</b>。每层各自选文件和行列，下面实时叠出来。想要哪个样子，把底下那串发给清泽。</div>
+</header>
+
+<div class="stagewrap">
+  <canvas class="stage" id="stage" width="192" height="192"></canvas>
+  <div class="layers" id="layers"></div>
+</div>
+
+<div class="out"><textarea id="out" readonly></textarea></div>
+
+<script>
+"use strict";
+/* ============================================================
+   换装台 · dress
+   四层（身体/衣服/头发/眼睛）各选一张表 + 一格，实时叠合预览
+   素材：Tiles by LimeZu — https://limezu.itch.io/
+   ============================================================ */
+
+const CG = "tiles/2_Characters/Character_Generator/";
+
+const LAYERS = [
+  { key: "body",   title: "① 身体 Body",     dir: "Bodies/32x32/",     prefix: "Body_32x32_",       max: 20, row: 1, col: 3 },
+  { key: "outfit", title: "② 衣服 Outfit",   dir: "Outfits/32x32/",    prefix: "Outfit_",           max: 40, row: 1, col: 3, suffix: "_32x32_01" },
+  { key: "hair",   title: "③ 头发 Hair",     dir: "Hairstyles/32x32/", prefix: "Hairstyle_",        max: 40, row: 1, col: 3, suffix: "_32x32_01" },
+  { key: "eyes",   title: "④ 眼睛 Eyes",     dir: "Eyes/32x32/",       prefix: "Eyes_32x32_",       max: 20, row: 1, col: 3 }
+];
+
+const CELL = 32;          /* 一格 32×32 */
+const SCALE = 6;          /* 预览放大 6 倍 → 一格 192 */
+const N = 6;              /* 参考网格：预览中心那一格四周的宽度 */
+
+const stage = document.getElementById("stage");
+const sctx  = stage.getContext("2d");
+sctx.imageSmoothingEnabled = false;
+
+const outEl = document.getElementById("out");
+const layersEl = document.getElementById("layers");
+
+const cache = Object.create(null);
+function getImg(path) {
+  let e = cache[path];
+  if (!e) { e = cache[path] = { el: new Image(), ok: false }; e.el.src = CG + path; e.el.onload = () => { e.ok = true; draw(); }; }
+  return e;
+}
+
+/* 给每层建下拉：候选名先列出来，加载失败的在 draw 里直接跳过 */
+function optionsFor(L) {
+  const arr = [];
+  for (let i = 1; i <= L.max; i++) {
+    const num = String(i).padStart(2, "0");
+    arr.push(L.dir + L.prefix + num + (L.suffix || "") + ".png");
+  }
+  return arr;
+}
+
+const state = {};
+
+LAYERS.forEach((L) => {
+  state[L.key] = { L, file: optionsFor(L)[0], row: L.row, col: L.col };
+
+  const box = document.createElement("div");
+  box.className = "lay";
+
+  const h = document.createElement("h2");
+  h.textContent = L.title;
+
+  const row = document.createElement("div");
+  row.className = "row";
+
+  const sel = document.createElement("select");
+  optionsFor(L).forEach((f) => {
+    const o = document.createElement("option");
+    o.value = f; o.textContent = f.split("/").pop();
+    sel.appendChild(o);
+  });
+  sel.addEventListener("change", () => { state[L.key].file = sel.value; draw(); });
+
+  const ri = document.createElement("input"); ri.type = "number"; ri.value = String(L.row); ri.min = 0;
+  ri.addEventListener("input", () => { state[L.key].row = Number(ri.value) || 0; draw(); });
+
+  const ci = document.createElement("input"); ci.type = "number"; ci.value = String(L.col); ci.min = 0;
+  ci.addEventListener("input", () => { state[L.key].col = Number(ci.value) || 0; draw(); });
+
+  row.appendChild(sel);
+  const l1 = document.createElement("label"); l1.textContent = "行"; row.appendChild(l1); row.appendChild(ri);
+  const l2 = document.createElement("label"); l2.textContent = "列"; row.appendChild(l2); row.appendChild(ci);
+
+  box.appendChild(h); box.appendChild(row);
+  layersEl.appendChild(box);
+});
+
+/* 预览：先按网格铺底（看对齐），再把四层按顺序叠上去 */
+function draw() {
+  sctx.clearRect(0, 0, stage.width, stage.height);
+  sctx.imageSmoothingEnabled = false;
+
+  /* 参考网格 —— 一格 32 像素 */
+  sctx.strokeStyle = "rgba(255,255,255,.10)";
+  sctx.lineWidth = 1;
+  for (let i = 0; i <= N; i++) {
+    const p = i * CELL * SCALE;
+    sctx.beginPath(); sctx.moveTo(p, 0); sctx.lineTo(p, stage.height); sctx.stroke();
+    sctx.beginPath(); sctx.moveTo(0, p); sctx.lineTo(stage.width, p); sctx.stroke();
+  }
+
+  let count = 0;
+  const lines = [];
+  for (const L of LAYERS) {
+    const st = state[L.key];
+    const e = getImg(st.file);
+    lines.push(L.key + ": " + st.file.split("/").pop() + "  行" + st.row + " 列" + st.col);
+    if (!e.ok) continue;
+    count++;
+    sctx.drawImage(e.el,
+      st.col * CELL, st.row * CELL, CELL, CELL,
+      0, 0, CELL * SCALE, CELL * SCALE);
+  }
+
+  outEl.value = lines.join("\n") + "\n\n（已叠上 " + count + "/4 层）";
+}
+
+/* 先把所有候选图都拉一遍，好让预览不闪 */
+LAYERS.forEach((L) => optionsFor(L).forEach((f) => getImg(f)));
+
+draw();
+</script>
+</body>
+</html>
