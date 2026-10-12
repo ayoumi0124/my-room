@@ -26,8 +26,10 @@
   .lib .cell img{image-rendering:pixelated;width:100%;height:38px;object-fit:contain;display:block;pointer-events:none}
   .lib .cell b{display:block;font-size:9px;color:var(--dim);font-weight:500;pointer-events:none}
   /* 铺墙地模式：左栏变宽，放素材大表 */
-  body.base .lib{display:block;width:300px;padding:6px}
+  body.base .lib{display:block;width:clamp(190px,42%,420px);padding:6px}
   .lib .hint{font-size:11px;color:var(--dim);margin:0 0 6px}
+  .lib .status{font-size:11px;color:var(--dim);margin:0 0 6px;word-break:break-all}
+  .lib .status.warn{color:#ffb0a0}
   .lib .swatch{display:flex;gap:6px;align-items:center;margin:0 0 8px;font-size:11px;color:var(--dim)}
   .lib .swatch canvas{image-rendering:pixelated;border:1px solid var(--line);border-radius:4px;background:#11101a}
   .lib .atlasbox{overflow:auto;max-width:100%}
@@ -52,6 +54,9 @@
     <button id="tWall" class="on">贴墙</button>
     <button id="tFloor">贴地</button>
     <select id="sheet"></select>
+    <button id="zS">小</button>
+    <button id="zM">中</button>
+    <button id="zL">大</button>
     <button id="clrBase">清掉这一层</button>
   </div>
   <div class="row" id="toolRow" style="margin-top:6px">
@@ -84,7 +89,7 @@
      铺墙地 —— 左边是一张 Room_Builder 大表，点一格 → 铺到当前房间 → 出来是 base
    坐标跟 house.html 一致：x=左, y=顶, w=显示宽, h=到底边的框
    素材：Tiles by LimeZu —— https://limezu.itch.io/
-   注意：作者把 Builder 拼成 Bulder（少一个 i），路径照原样写。
+   注意：作者把 Builder 拼成 Bulder（少一个 i）。下面 RB_LIST 会两种都试一遍。
    ============================================================ */
 
 const W = 360, H = 640, WALL_Y = 150;
@@ -123,8 +128,14 @@ const THEMES = [
 const THEME_BY_KEY = Object.fromEntries(THEMES.map(t => [t.key, t]));
 const urlOf = (c, n) => BASE + THEME_BY_KEY[c].dir + "/" + THEME_BY_KEY[c].pre + n + ".png";
 
-/* ---------- 墙 / 地板素材表（Room_Builder 那几张） ---------- */
-const RB = "tiles/1_Interiors/32x32/Room_Bulder_subfiles_32x32/";
+/* ---------- 墙 / 地板素材表 ----------
+   路径写三份，第一个读不到就自动试下一个。
+   要是三个全读不到，左边会红字写「读不到大表」，把那行发给清泽就行。 */
+const RB_LIST = [
+  "tiles/1_Interiors/32x32/Room_Bulder_subfiles_32x32/",
+  "tiles/1_Interiors/32x32/Room_Builder_subfiles_32x32/",
+  "tiles/1_Interiors/32x32/Room_Bulder_subfiles_32x32"
+];
 const SHEETS = [
   { key:"walls",  label:"墙纸",     file:"Room_Builder_Walls_32x32.png",         cols:32, rows:40 },
   { key:"floors", label:"地板",     file:"Room_Builder_Floors_32x32.png",        cols:15, rows:40 },
@@ -132,7 +143,6 @@ const SHEETS = [
   { key:"base",   label:"踢脚线",   file:"Room_Builder_baseboards_32x32.png",    cols:6,  rows:6  }
 ];
 const SHEET_BY = Object.fromEntries(SHEETS.map(s => [s.key, s]));
-const sheetUrl = s => RB + s.file;
 
 /* ---------- 房间 ---------- */
 const ROOMS = [
@@ -148,12 +158,12 @@ const ROOM_BY_KEY = Object.fromEntries(ROOMS.map(r => [r.key, r]));
 const DATA = {};
 ROOMS.forEach(r => { DATA[r.key] = { wall:null, floor:null, items:[] }; });
 
-let curRoom   = "living";
-let sel       = -1;
-let mode      = "furniture";   // furniture | base
-let baseTarget= "wall";        // wall | floor
-let sheetKey  = "walls";
-let atlasTile = 24;            // 大表上一格占多少屏幕像素
+let curRoom    = "living";
+let sel        = -1;
+let mode       = "furniture";   // furniture | base
+let baseTarget = "wall";        // wall | floor
+let sheetKey   = "walls";
+let atlasTile  = 20;            // 大表上一格占多少屏幕像素
 
 const cv  = document.getElementById("c");
 const ctx = cv.getContext("2d");
@@ -161,7 +171,7 @@ ctx.imageSmoothingEnabled = false;
 const lib = document.getElementById("lib");
 const out = document.getElementById("out");
 
-/* ---------- 图片缓存 ---------- */
+/* ---------- 图片缓存（带备用路径） ---------- */
 const IMG = Object.create(null);
 function getImg(u, cb) {
   let e = IMG[u];
@@ -175,7 +185,31 @@ function getImg(u, cb) {
   }
   return e;
 }
-const getSheetImg = (sh, cb) => getImg(sheetUrl(sh), cb);
+
+/* 大表：依次试 RB_LIST 里的路径 */
+const SHEET = Object.create(null);
+let sheetStatus = "";
+function getSheet(sh, cb) {
+  let s = SHEET[sh.key];
+  if (s && s.ok) { cb && cb(); return s; }
+  if (!s) {
+    s = SHEET[sh.key] = { ok:false, el:new Image(), url:"", i:0 };
+    (function tryNext() {
+      if (s.i >= RB_LIST.length) {
+        sheetStatus = "读不到大表（试过 " + RB_LIST.length + " 个路径）。第一行是：" + RB_LIST[0] + sh.file;
+        drawAtlas();
+        return;
+      }
+      const u = RB_LIST[s.i] + sh.file;
+      s.url = u;
+      s.el.onload  = () => { s.ok = true; sheetStatus = "已读到 " + sh.file + "  （" + s.el.naturalWidth + "×" + s.el.naturalHeight + "）"; drawAtlas(); draw(); };
+      s.el.onerror = () => { s.i++; tryNext(); };
+      s.el.src = u;
+    })();
+  }
+  return s;
+}
+function sheetReady(sh) { const s = SHEET[sh.key]; return s && s.ok ? s : null; }
 
 /* ---------- 屋子画布 ---------- */
 let scale = 1;
@@ -212,14 +246,14 @@ function tileArea(t, x0, y0, x1, y1) {
   if (!t) return false;
   const sh = SHEET_BY[t.s];
   if (!sh) return false;
-  const e = getSheetImg(sh, () => draw());
-  if (!e.ok) return false;
+  const s = sheetReady(sh) || getSheet(sh, () => draw());
+  if (!s || !s.ok) return false;
   const sx = t.c * 32, sy = t.r * 32;
   for (let y = y0; y < y1; y += TILE) {
     for (let x = x0; x < x1; x += TILE) {
       const w = Math.min(TILE, x1 - x);
       const h = Math.min(TILE, y1 - y);
-      ctx.drawImage(e.el, sx, sy, w, h, x, y, w, h);
+      ctx.drawImage(s.el, sx, sy, w, h, x, y, w, h);
     }
   }
   return true;
@@ -328,6 +362,11 @@ function buildAtlas() {
   hint.textContent = "点一格 → 铺到「" + ROOM_BY_KEY[curRoom].label + "」的" + (baseTarget === "wall" ? "墙" : "地板") + "上";
   lib.appendChild(hint);
 
+  const st = document.createElement("div");
+  st.className = "status" + (sheetStatus.indexOf("读不到") === 0 ? " warn" : "");
+  st.textContent = sheetStatus || "正在读大表…";
+  lib.appendChild(st);
+
   const sw = document.createElement("div");
   sw.className = "swatch";
   const sc = document.createElement("canvas");
@@ -336,17 +375,17 @@ function buildAtlas() {
   const cur = DATA[curRoom][baseTarget];
   sp.textContent = cur ? (SHEET_BY[cur.s].label + " 第 " + cur.c + " 列 / 第 " + cur.r + " 行") : "还没铺，下面点一格";
   if (cur) {
-    const e = getSheetImg(SHEET_BY[cur.s], () => buildAtlas());
-    if (e.ok) sc.getContext("2d").drawImage(e.el, cur.c * 32, cur.r * 32, 32, 32, 0, 0, 32, 32);
+    const s = sheetReady(SHEET_BY[cur.s]);
+    if (s) sc.getContext("2d").drawImage(s.el, cur.c * 32, cur.r * 32, 32, 32, 0, 0, 32, 32);
   }
   sw.appendChild(sc); sw.appendChild(sp);
   lib.appendChild(sw);
 
+  const sh = SHEET_BY[sheetKey];
   const box = document.createElement("div");
   box.className = "atlasbox";
   const ac = document.createElement("canvas");
   ac.id = "ac";
-  const sh = SHEET_BY[sheetKey];
   ac.width  = sh.cols * atlasTile;
   ac.height = sh.rows * atlasTile;
   box.appendChild(ac);
@@ -362,6 +401,8 @@ function buildAtlas() {
     DATA[curRoom][baseTarget] = { s: sheetKey, c: c, r: rr };
     draw(); render(); buildAtlas();
   });
+
+  getSheet(sh, () => { if (document.getElementById("ac")) { drawAtlas(); buildAtlas(); } });
 }
 
 function drawAtlas() {
@@ -372,11 +413,20 @@ function drawAtlas() {
   g.imageSmoothingEnabled = false;
   const w = ac.width, h = ac.height;
   g.fillStyle = "#1a1922"; g.fillRect(0, 0, w, h);
-  const e = getSheetImg(sh, () => drawAtlas());
-  if (e.ok) g.drawImage(e.el, 0, 0, w, h);
-  g.strokeStyle = "rgba(255,214,150,.16)"; g.lineWidth = 1;
+
+  const s = sheetReady(sh);
+  if (s) {
+    g.drawImage(s.el, 0, 0, w, h);
+  } else {
+    g.fillStyle = "#8c8494";
+    g.font = "12px sans-serif";
+    g.fillText("大表读不到 …", 8, 20);
+  }
+
+  g.strokeStyle = "rgba(255,214,150,.20)"; g.lineWidth = 1;
   for (let c = 0; c <= sh.cols; c++) { g.beginPath(); g.moveTo(c * atlasTile + .5, 0); g.lineTo(c * atlasTile + .5, h); g.stroke(); }
   for (let r = 0; r <= sh.rows; r++) { g.beginPath(); g.moveTo(0, r * atlasTile + .5); g.lineTo(w, r * atlasTile + .5); g.stroke(); }
+
   const cur = DATA[curRoom][baseTarget];
   if (cur && cur.s === sheetKey) {
     g.strokeStyle = "#ffd696"; g.lineWidth = 2;
@@ -496,6 +546,12 @@ SHEETS.forEach(s => {
   sheetSel.appendChild(o);
 });
 sheetSel.addEventListener("change", () => { sheetKey = sheetSel.value; buildAtlas(); });
+
+/* 大表格子大小 */
+function setZoom(t) { atlasTile = t; buildAtlas(); }
+document.getElementById("zS").addEventListener("click", () => setZoom(12));
+document.getElementById("zM").addEventListener("click", () => setZoom(20));
+document.getElementById("zL").addEventListener("click", () => setZoom(30));
 
 /* 清掉当前这一层 */
 document.getElementById("clrBase").addEventListener("click", () => {
