@@ -23,6 +23,7 @@
   .pal button.sw{width:24px;height:24px;padding:0;border-radius:6px;border:1px solid var(--line)}
   .pal button.sw.on{outline:2px solid var(--hot);outline-offset:0}
   .pal input[type=color]{width:30px;height:24px;padding:0;border:1px solid var(--line);border-radius:6px;background:var(--card)}
+
   .wrap{flex:1;display:flex;min-height:0}
   .lib{width:118px;flex:none;overflow-y:auto;border-right:1px solid var(--line);
     padding:6px;display:grid;grid-template-columns:1fr 1fr;gap:5px;align-content:start}
@@ -31,13 +32,15 @@
   .lib .cell:active{border-color:var(--hot)}
   .lib .cell img{image-rendering:pixelated;width:100%;height:38px;object-fit:contain;display:block;pointer-events:none}
   .lib .cell b{display:block;font-size:9px;color:var(--dim);font-weight:500;pointer-events:none}
-  body.base .lib{display:block;width:clamp(180px,42%,460px);padding:6px}
+  /* 铺墙地模式：左栏拉宽，放得下素材大表 */
+  body.base .lib{display:block;width:clamp(240px,34%,560px);padding:8px}
+
   .lib .hint{font-size:11px;color:var(--dim);margin:0 0 6px}
-  .lib .status{font-size:11px;color:var(--dim);margin:0 0 6px;word-break:break-all}
+  .lib .status{font-size:11px;color:var(--dim);margin:0 0 6px;word-break:break-word}
   .lib .status.warn{color:#ffb0a0}
-  .lib .swatch{display:flex;gap:6px;align-items:center;margin:0 0 6px;font-size:11px;color:var(--dim)}
+  .lib .swatch{display:flex;gap:6px;align-items:center;margin:0 0 8px;font-size:11px;color:var(--dim)}
   .lib .swatch canvas{image-rendering:pixelated;border:1px solid var(--line);border-radius:4px;background:#11101a}
-  .lib .atlasbox{overflow:auto;max-width:100%;border:1px solid var(--line);border-radius:6px;background:#0e0d12}
+  .lib .atlasbox{overflow:auto;max-width:100%;border:1px solid var(--line);border-radius:6px;background:#0e0d12;max-height:60vh}
   .lib .atlasbox canvas{cursor:grab}
   .stage{flex:1;display:flex;align-items:center;justify-content:center;background:#0e0d12;overflow:hidden}
   canvas{display:block;touch-action:none;image-rendering:pixelated}
@@ -105,8 +108,8 @@
       <input type="text" id="regName" value="厨房">
     </label>
     <button id="regDel">删掉这块</button>
-    <button id="regW1">矮</button>
-    <button id="regW2">高</button>
+    <button id="regH1">矮</button>
+    <button id="regH2">高</button>
   </div>
   <div class="row" id="toolRow" style="margin-top:6px">
     <button id="del">删掉选中</button>
@@ -137,26 +140,18 @@
    ┌ 摆家具 —— 左边图库 → 点进右边屋子 → 拖位置 → 出来是 items
    └ 铺墙地 —— 左边是一张 Room_Builder 大表，点一格 → 铺到当前房间 → 出来是 base
 
-   ★ 这一版新加的
-     1. 自动保存。你铺的、摆的、划的，每动一下自己就记一次，存手机浏览器里。
-        关页面、刷新、明天再开都在。想从零开始就按「清空这一间」。
+   ★ 这一版有的
+     1. 自动保存。你铺的、摆的、划的，每动一下自己记一次，存在浏览器里。
+        关页面、刷新、明天再开都在。想从零开始按「清空这一间」。
      2. 划区域。按「加一块区域」，屋子里就多一块框，拖着挪位置。
-        给它取个名字（厨房 / 猫窝 / 书房 / 卧室），再挑块地砖 —— 铺法跟铺地板一样，
-        点「贴地」，选一块区域，在大表上点一格，就铺到那块区域上。
-        客厅地板上画出来的那块深一点的地，将来点进去就是「做饭」或者「看小橘」。
-
-   ★ 底色
-     没铺贴图的那一层，颜色自己挑。贴墙时管墙面色，贴地时管地板底色。
-
-   ★ 去留白
-     作者在素材表里塞了纯黑纯白的格子当分隔，还有些近白的横条。
-     开着「去留白」，碰到就沿用上一格，不留洞也不出黑白杠，大表上画红叉标出来。
-     「力度」严 / 中 / 松 调它认得多狠；「横条也去」连整行整列一起算。
+        给它取名（厨房 / 猫窝 / 书房 / 卧室），再挑块地砖 ——
+        先点中那块区域，点「贴地」，在大表上点一格，就只铺到那一块上。
+     3. 底色。没铺贴图的那一层，颜色自己挑。
+     4. 去留白。作者在素材表里塞了纯黑纯白的格子当分隔，
+        开着就跳过它们，大表上画红叉标出来。「力度」严 / 中 / 松。
 
    「看全」＝ 缩到整张宽度装得下；大表按住能拖。
-   「凑整铺满」＝ 屋高宽除不尽一格的时候，自动凑成整数，边角不留半截。
-
-   坐标跟 house.html 一致：x=左, y=顶, w=宽, h=高（到底边）
+   坐标跟 house.html 一致：x=左, y=顶, w=宽, h=高
    素材：Tiles by LimeZu —— https://limezu.itch.io/
    注意：作者把 Builder 拼成 Bulder（少一个 i）。下面 RB_LIST 两种都试。
    ============================================================ */
@@ -233,8 +228,8 @@ const PALETTE = [
 ];
 
 let curRoom    = "living";
-let sel        = -1;   // 选中的家具
-let selRegion  = -1;   // 选中的区域
+let sel        = -1;
+let selRegion  = -1;
 let mode       = "furniture";
 let baseTarget = "wall";
 let sheetKey   = "walls";
@@ -254,9 +249,7 @@ const out = document.getElementById("out");
 
 /* ---------- 家底：自动保存 ---------- */
 function saveAll() {
-  try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify({ v:1, room:curRoom, data:DATA }));
-  } catch (e) {}
+  try { localStorage.setItem(SAVE_KEY, JSON.stringify({ v:1, room:curRoom, data:DATA })); } catch (e) {}
 }
 function loadAll() {
   try {
@@ -280,7 +273,7 @@ function loadAll() {
   } catch (e) {}
 }
 
-/* ---------- 家具图缓存 ---------- */
+/* ---------- 图片缓存 ---------- */
 const IMG = Object.create(null);
 function getImg(u, cb) {
   let e = IMG[u];
@@ -506,7 +499,6 @@ function drawRoomBg() {
     for (let y = WALL_Y + 34; y < FLOOR.y1; y += 34) { ctx.beginPath(); ctx.moveTo(0, y + .5); ctx.lineTo(W, y + .5); ctx.stroke(); }
   }
 
-  /* 区域：画在地板上面 */
   const regs = d.regions || [];
   regs.forEach((g, i) => {
     const ok = g.floor ? tileArea(g.floor, g.x, g.y, g.x + g.w, g.y + g.h) : false;
@@ -600,6 +592,9 @@ function addCell(key, num, u) {
 }
 
 /* ---------- 墙地大表 ---------- */
+function selReg() {
+  return (DATA[curRoom].regions || [])[selRegion] || null;
+}
 function updateStatusLine() {
   const el = document.getElementById("atlasStatus");
   if (!el) return;
@@ -619,19 +614,19 @@ function updateSwatch() {
   const g = sc.getContext("2d");
   g.clearRect(0, 0, 32, 32);
 
-  const reg = (mode === "base" && selRegion >= 0) ? (DATA[curRoom].regions || [])[selRegion] : null;
+  const reg = selReg();
   const isReg = !!(reg && baseTarget === "floor");
   const cur  = isReg ? reg.floor : DATA[curRoom][baseTarget];
-  const tint = isReg ? null : DATA[curRoom].tint[baseTarget];
+  const tint = isReg ? (reg.tint || null) : DATA[curRoom].tint[baseTarget];
 
   if (!cur) {
-    if (tint) { g.fillStyle = tint; g.fillRect(0, 0, 32, 32); sp.textContent = "没铺贴图，用底色 " + tint; }
+    if (tint) { g.fillStyle = tint; g.fillRect(0, 0, 32, 32); sp.textContent = "用底色 " + tint; }
     else { sp.textContent = isReg ? "这块区域还没挑地砖" : "还没铺，下面点一格"; }
     return;
   }
   const s = sheetOf(SHEET_BY[cur.s]);
   if (s.ok) g.drawImage(s.el, cur.c * 32, cur.r * 32, 32, 32, 0, 0, 32, 32);
-  sp.textContent = (isReg ? "「" + (reg.name || "区域") + "」的砖：" : "") +
+  sp.textContent = (isReg ? "「" + (reg.name || "区域") + "」：" : "") +
                    SHEET_BY[cur.s].label + " 第 " + cur.c + " 列 / 第 " + cur.r + " 行　一块 " +
                    (cur.lc || 1) + "×" + (cur.lr || 1) + (cur.fit ? "　凑整" : "") +
                    (cur.clean ? "　去留白" : "");
@@ -642,9 +637,13 @@ function buildAtlas() {
 
   const hint = document.createElement("div");
   hint.className = "hint";
-  hint.textContent = (mode === "base" && selRegion >= 0 && baseTarget === "floor")
-    ? "现在点大表 → 铺到「" + ((DATA[curRoom].regions || [])[selRegion] || {}).name || "区域" + "」那块上"
-    : "点一格 → 铺到「" + ROOM_BY_KEY[curRoom].label + "」的" + (baseTarget === "wall" ? "墙" : "地板") + "上";
+  const reg = selReg();
+  if (reg && baseTarget === "floor") {
+    hint.textContent = "现在点大表 → 砖铺到「" + (reg.name || "区域") + "」那一块上";
+  } else {
+    hint.textContent = "点一格 → 铺到「" + ROOM_BY_KEY[curRoom].label + "」的" +
+                       (baseTarget === "wall" ? "墙" : "地板") + "上　·　按住拖动可平移大表";
+  }
   lib.appendChild(hint);
 
   const st = document.createElement("div");
@@ -693,10 +692,10 @@ function buildAtlas() {
     const rr = Math.floor((ev.clientY - r.top ) / atlasTile);
     if (c < 0 || rr < 0 || c >= sh.cols || rr >= sh.rows) return;
     const cell = { s: sheetKey, c: c, r: rr, lc: loopCols, lr: loopRows, fit: fitMode, clean: cleanMode };
-    const reg = (selRegion >= 0) ? (DATA[curRoom].regions || [])[selRegion] : null;
-    if (reg && baseTarget === "floor") { reg.floor = cell; }
+    const g = selReg();
+    if (g && baseTarget === "floor") { g.floor = cell; }
     else { DATA[curRoom][baseTarget] = cell; }
-    draw(); render(); drawAtlas(); updateSwatch();
+    draw(); render(); drawAtlas(); updateSwatch(); buildAtlas();
   });
   ac.addEventListener("pointercancel", () => { pan = null; });
 
@@ -743,8 +742,8 @@ function drawAtlas() {
   for (let c = 0; c <= sh.cols; c++) { g.beginPath(); g.moveTo(c * atlasTile + .5, 0); g.lineTo(c * atlasTile + .5, h); g.stroke(); }
   for (let r = 0; r <= sh.rows; r++) { g.beginPath(); g.moveTo(0, r * atlasTile + .5); g.lineTo(w, r * atlasTile + .5); g.stroke(); }
 
-  const reg = (selRegion >= 0) ? (DATA[curRoom].regions || [])[selRegion] : null;
-  const cur = (reg && baseTarget === "floor" && reg.floor) ? reg.floor : DATA[curRoom][baseTarget];
+  const rg = selReg();
+  const cur = (rg && baseTarget === "floor" && rg.floor) ? rg.floor : DATA[curRoom][baseTarget];
   if (cur && cur.s === sheetKey) {
     const lc2 = Math.max(1, cur.lc || 1);
     const lr2 = Math.max(1, cur.lr || 1);
@@ -762,8 +761,13 @@ function paintPal() {
   const pal = document.getElementById("pal");
   const lb  = document.getElementById("palLabel");
   if (!pal) return;
-  const cur = DATA[curRoom].tint[baseTarget];
-  if (lb) lb.textContent = (baseTarget === "wall" ? "墙面色" : "地板底色") + (cur ? "：" + cur : "（没设，用默认）");
+  const rg  = selReg();
+  const isReg = !!(rg && baseTarget === "floor");
+  const cur = isReg ? (rg.tint || null) : DATA[curRoom].tint[baseTarget];
+  if (lb) {
+    lb.textContent = (isReg ? "「" + (rg.name || "区域") + "」的底" : (baseTarget === "wall" ? "墙面色" : "地板底色")) +
+                     (cur ? "：" + cur : "（没设，用默认）");
+  }
   pal.innerHTML = "";
   PALETTE.forEach(hex => {
     const b = document.createElement("button");
@@ -781,8 +785,8 @@ function paintPal() {
   pal.appendChild(pick);
 }
 function setTint(hex) {
-  const reg = (mode === "base" && selRegion >= 0) ? (DATA[curRoom].regions || [])[selRegion] : null;
-  if (reg && baseTarget === "floor") reg.tint = hex;
+  const rg = selReg();
+  if (rg && baseTarget === "floor") rg.tint = hex;
   else DATA[curRoom].tint[baseTarget] = hex;
   draw(); render(); updateSwatch(); paintPal();
 }
@@ -801,13 +805,12 @@ cv.addEventListener("pointerdown", (ev) => {
         syncRegionBar();
         drag = { kind:"reg", i: i, dx: p.x - g.x, dy: p.y - g.y };
         try { cv.setPointerCapture(ev.pointerId); } catch (e) {}
-        draw(); render(); updateSwatch(); drawAtlas();
+        draw(); render(); updateSwatch(); paintPal(); buildAtlas();
         return;
       }
     }
-    selRegion = -1;
-    syncRegionBar();
-    draw(); render(); updateSwatch(); drawAtlas();
+    if (selRegion >= 0) { selRegion = -1; syncRegionBar(); paintPal(); buildAtlas(); }
+    draw(); render(); updateSwatch();
     return;
   }
 
@@ -843,13 +846,14 @@ function stopDrag() { if (drag) { drag = null; render(); saveAll(); } }
 cv.addEventListener("pointerup", stopDrag);
 cv.addEventListener("pointercancel", stopDrag);
 
-/* ---------- 工具按钮 ---------- */
+/* ---------- 删除 ---------- */
 function delSel() {
   if (mode === "base") {
     if (selRegion < 0) return;
     (DATA[curRoom].regions || []).splice(selRegion, 1);
-    selRegion = -1; syncRegionBar();
-    draw(); render(); updateSwatch(); drawAtlas();
+    selRegion = -1;
+    syncRegionBar(); paintPal();
+    draw(); render(); updateSwatch(); buildAtlas();
     return;
   }
   if (sel < 0) return;
@@ -859,7 +863,7 @@ function delSel() {
 document.getElementById("del").addEventListener("click", delSel);
 document.getElementById("narrow").addEventListener("click", () => {
   if (mode === "base") {
-    const g = (DATA[curRoom].regions || [])[selRegion];
+    const g = selReg();
     if (!g) return;
     g.w = Math.max(24, Math.round(g.w / 1.12)); draw(); render();
     return;
@@ -869,7 +873,7 @@ document.getElementById("narrow").addEventListener("click", () => {
 });
 document.getElementById("wide").addEventListener("click", () => {
   if (mode === "base") {
-    const g = (DATA[curRoom].regions || [])[selRegion];
+    const g = selReg();
     if (!g) return;
     g.w = Math.min(348, Math.round(g.w * 1.12)); draw(); render();
     return;
@@ -878,13 +882,13 @@ document.getElementById("wide").addEventListener("click", () => {
   o.w = Math.min(400, Math.round(o.w * 1.12)); draw(); render();
 });
 document.getElementById("stretch").addEventListener("click", () => {
-  if (mode === "base") return;
-  if (sel < 0) return; const o = DATA[curRoom].items[sel];
+  if (mode === "base" || sel < 0) return;
+  const o = DATA[curRoom].items[sel];
   o.stretch = !o.stretch; draw(); render();
 });
 document.getElementById("back").addEventListener("click", () => {
-  if (mode === "base") return;
-  if (sel <= 0) return; const l = DATA[curRoom].items;
+  if (mode === "base" || sel <= 0) return;
+  const l = DATA[curRoom].items;
   l.unshift(l.splice(sel, 1)[0]); sel = 0; draw(); render();
 });
 document.getElementById("front").addEventListener("click", () => {
@@ -908,6 +912,10 @@ const tipEl   = document.getElementById("tip");
 function setMode(m) {
   mode = m;
   const isBase = (m === "base");
+
+  /* ← 上一版把这行漏了，左栏就一直挂在「图库」那个窄格子里，字挤成一列 */
+  document.body.classList.toggle("base", isBase);
+
   mFur.classList.toggle("on", !isBase);
   mBase.classList.toggle("on", isBase);
   baseCtl.style.display  = isBase ? "flex" : "none";
@@ -918,13 +926,11 @@ function setMode(m) {
   themeSel.style.display = isBase ? "none" : "";
 
   if (isBase) {
-    tipEl.textContent = "「加一块区域」可以在屋子里划出厨房、猫窝。点中一块区域，再点「贴地」在大表上挑砖，就铺到那一块上。";
+    tipEl.textContent = "点中一块区域 → 点「贴地」→ 在大表上挑砖，就只铺到那一块上。空白处点一下取消选中。";
     sel = -1; selRegion = -1;
     syncRegionBar();
     paintPal();
-    updateSwatch();
-    drawAtlas();
-    updateStatusLine();
+    buildAtlas();
   } else {
     tipEl.textContent = "左边点一下 → 进屋子；拖屋里那件 → 挪位置；点中会亮黄边。";
     scan(themeSel.value);
@@ -944,9 +950,7 @@ function setTarget(t) {
   sheetKey = (t === "wall") ? "walls" : "floors";
   sheetSel.value = sheetKey;
   paintPal();
-  updateSwatch();
-  drawAtlas();
-  updateStatusLine();
+  buildAtlas();
 }
 tWall.addEventListener("click", () => setTarget("wall"));
 tFloor.addEventListener("click", () => setTarget("floor"));
@@ -955,13 +959,9 @@ tFloor.addEventListener("click", () => setTarget("floor"));
 const lcSel = document.getElementById("lc");
 const lrSel = document.getElementById("lr");
 function applySize() {
-  const reg = (mode === "base" && selRegion >= 0) ? (DATA[curRoom].regions || [])[selRegion] : null;
-  if (reg && baseTarget === "floor") {
-    if (reg.floor) { reg.floor.lc = loopCols; reg.floor.lr = loopRows; }
-  } else {
-    const cur = DATA[curRoom][baseTarget];
-    if (cur) { cur.lc = loopCols; cur.lr = loopRows; }
-  }
+  const rg = selReg();
+  const t = (rg && baseTarget === "floor") ? rg.floor : DATA[curRoom][baseTarget];
+  if (t) { t.lc = loopCols; t.lr = loopRows; }
   draw(); render(); drawAtlas(); updateSwatch();
 }
 lcSel.addEventListener("change", () => { loopCols = Number(lcSel.value) || 1; applySize(); });
@@ -980,8 +980,8 @@ document.getElementById("rowDn").addEventListener("click", () => nudgeRow(1));
 
 /* 底色回默认 */
 document.getElementById("tintClr").addEventListener("click", () => {
-  const reg = (mode === "base" && selRegion >= 0) ? (DATA[curRoom].regions || [])[selRegion] : null;
-  if (reg && baseTarget === "floor") reg.tint = null;
+  const rg = selReg();
+  if (rg && baseTarget === "floor") rg.tint = null;
   else DATA[curRoom].tint[baseTarget] = null;
   draw(); render(); updateSwatch(); paintPal();
 });
@@ -989,27 +989,27 @@ document.getElementById("tintClr").addEventListener("click", () => {
 /* ---------- 区域 ---------- */
 const regNameEl = document.getElementById("regName");
 function syncRegionBar() {
-  const g = (DATA[curRoom].regions || [])[selRegion];
+  const g = selReg();
   regNameEl.value = g ? (g.name || "") : "厨房";
 }
 regNameEl.addEventListener("input", () => {
-  const g = (DATA[curRoom].regions || [])[selRegion];
+  const g = selReg();
   if (g) { g.name = regNameEl.value; draw(); render(); updateSwatch(); }
 });
 document.getElementById("addRegion").addEventListener("click", () => {
   const regs = DATA[curRoom].regions || (DATA[curRoom].regions = []);
-  regs.push({ name: regNameEl.value || "厨房", x: 110, y: 400, w: 140, h: 110, floor: null, tint: null });
+  regs.push({ name: regNameEl.value || "厨房", x: 110, y: 400, w: 150, h: 110, floor: null, tint: null });
   selRegion = regs.length - 1;
-  syncRegionBar();
-  draw(); render(); updateSwatch(); drawAtlas();
+  syncRegionBar(); paintPal();
+  draw(); render(); updateSwatch(); buildAtlas();
 });
 document.getElementById("regDel").addEventListener("click", delSel);
-document.getElementById("regW1").addEventListener("click", () => {
-  const g = (DATA[curRoom].regions || [])[selRegion];
+document.getElementById("regH1").addEventListener("click", () => {
+  const g = selReg();
   if (!g) return; g.h = Math.max(24, Math.round(g.h / 1.12)); draw(); render();
 });
-document.getElementById("regW2").addEventListener("click", () => {
-  const g = (DATA[curRoom].regions || [])[selRegion];
+document.getElementById("regH2").addEventListener("click", () => {
+  const g = selReg();
   if (!g) return; g.h = Math.min(360, Math.round(g.h * 1.12)); draw(); render();
 });
 
@@ -1064,7 +1064,7 @@ sheetSel.addEventListener("change", () => { sheetKey = sheetSel.value; buildAtla
 function setZoom(t) { atlasTile = t; buildAtlas(); }
 function fitAll() {
   const sh = SHEET_BY[sheetKey];
-  const avail = Math.max(120, lib.clientWidth - 20);
+  const avail = Math.max(140, lib.clientWidth - 24);
   atlasTile = Math.max(3, Math.floor(avail / sh.cols));
   buildAtlas();
 }
@@ -1075,18 +1075,18 @@ document.getElementById("zL").addEventListener("click", () => setZoom(30));
 
 /* 清掉贴图 */
 document.getElementById("clrBase").addEventListener("click", () => {
-  const reg = (mode === "base" && selRegion >= 0) ? (DATA[curRoom].regions || [])[selRegion] : null;
-  if (reg && baseTarget === "floor") reg.floor = null;
+  const rg = selReg();
+  if (rg && baseTarget === "floor") rg.floor = null;
   else DATA[curRoom][baseTarget] = null;
-  draw(); render(); updateSwatch(); drawAtlas();
+  draw(); render(); updateSwatch(); drawAtlas(); buildAtlas();
 });
 
 /* 清空这一间 */
 document.getElementById("wipe").addEventListener("click", () => {
   DATA[curRoom] = blankRoom();
   sel = -1; selRegion = -1;
-  syncRegionBar();
-  draw(); render(); updateSwatch(); drawAtlas(); paintPal();
+  syncRegionBar(); paintPal();
+  draw(); render(); updateSwatch(); drawAtlas(); buildAtlas();
 });
 
 /* ---------- 复制清单 ---------- */
@@ -1150,8 +1150,8 @@ ROOMS.forEach(r => {
 });
 roomSel.addEventListener("change", () => {
   curRoom = roomSel.value; sel = -1; selRegion = -1;
-  syncRegionBar();
-  if (mode === "base") { paintPal(); updateSwatch(); drawAtlas(); updateStatusLine(); }
+  syncRegionBar(); paintPal();
+  if (mode === "base") buildAtlas();
   draw(); render();
 });
 
@@ -1173,6 +1173,12 @@ paintPal();
 scan(THEMES[0].key);
 fit();
 render();
+
+/* 一进来就按浏览器里的记录，决定左栏宽窄 */
+(function initialMode() {
+  const isBase = (document.getElementById("baseCtl").style.display !== "none");
+  document.body.classList.toggle("base", true);
+})();
 </script>
 </body>
 </html>
