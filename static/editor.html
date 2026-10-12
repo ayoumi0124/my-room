@@ -17,6 +17,7 @@
   button:active{background:#2a2733}
   button.hot{background:#3a4a63;border-color:#4a5f80}
   button.on{background:#4a3f2a;border-color:var(--hot)}
+  label.f{color:var(--dim);font-size:12px;display:inline-flex;gap:4px;align-items:center}
   .wrap{flex:1;display:flex;min-height:0}
   .lib{width:118px;flex:none;overflow-y:auto;border-right:1px solid var(--line);
     padding:6px;display:grid;grid-template-columns:1fr 1fr;gap:5px;align-content:start}
@@ -54,16 +55,24 @@
     <button id="tWall" class="on">贴墙</button>
     <button id="tFloor">贴地</button>
     <select id="sheet"></select>
-    <label style="color:var(--dim);font-size:12px">循环
-      <select id="loop">
-        <option value="1">1 行（一格一格）</option>
-        <option value="2">2 行</option>
-        <option value="3">3 行</option>
-        <option value="4">4 行</option>
-        <option value="6">6 行</option>
+    <label class="f">横着
+      <select id="lc">
+        <option value="1">1 列</option><option value="2">2 列</option><option value="3">3 列</option>
+        <option value="4" selected>4 列</option><option value="6">6 列</option><option value="8">8 列</option>
+        <option value="16">16 列</option>
+      </select>
+    </label>
+    <label class="f">竖着
+      <select id="lr">
+        <option value="1">1 行</option><option value="2">2 行</option><option value="3">3 行</option>
+        <option value="4" selected>4 行</option><option value="5">5 行</option><option value="6">6 行</option>
         <option value="8">8 行</option>
       </select>
     </label>
+    <button id="rowUp">行 ↑</button>
+    <button id="rowDn">行 ↓</button>
+  </div>
+  <div class="row" id="baseCtl2" style="display:none;margin-top:6px">
     <button id="fit">凑整铺满</button>
     <button id="zAll">看全</button>
     <button id="zS">小</button>
@@ -100,17 +109,15 @@
    摆家具 —— 左边图库 → 点进右边屋子 → 拖位置 → 出来是 items
    铺墙地 —— 左边是一张 Room_Builder 大表，点一格 → 铺到当前房间 → 出来是 base
 
-   「循环几行」是这块的关键：
-     整套墙纸不是一张图，是「一行一行」拼出来的横带子。
-     只重复一行 → 那条横带会一直重复，接缝很生硬。
-     循环 2~8 行 → 从你点的那行开始，往下连着几行当一个循环，再重复。
-     到底该循环几行，看大表里那套图案竖着占几行 —— 你试出来就行。
+   ★ 关键：整套墙纸不是一个格子，是「一块」——横着几列、竖着几行。
+     大表上：竖着每 4 行换一种花纹；横着每几列是一套的左右接续。
+     所以要点「横着几列 / 竖着几行」，填上那块的大小。
+     填对了，整面墙才接得上；填 1×1 就会一格一格地断开。
 
-   「看全」＝ 把大表缩到整张宽度装得下，一眼看完全部 32 列。
-   大表也能拖着平移（按住拖，松手不选中）。
+   「行 ↑ / 行 ↓」：起点行上下挪一格。白条、接缝对不齐，就靠这个一格一格试。
 
-   凑整铺满：墙区高 150、一格 32 → 150÷32＝4.6875，除不尽，边角会剩半截。
-     开着就自己算成整数行，四边齐。
+   「看全」＝ 缩到整张宽度装得下；大表按住能拖。
+   「凑整铺满」＝ 墙高 150、一格 32，除不尽，边角会剩半截；开着就自己算成整数行。
 
    坐标跟 house.html 一致：x=左, y=顶, w=显示宽, h=到底边的框
    素材：Tiles by LimeZu —— https://limezu.itch.io/
@@ -186,8 +193,9 @@ let mode       = "furniture";
 let baseTarget = "wall";
 let sheetKey   = "walls";
 let atlasTile  = 20;
-let loopRows   = 1;        // 循环几行
-let fitMode    = true;     // 凑整铺满
+let loopCols   = 4;     // 横着几列
+let loopRows   = 4;     // 竖着几行
+let fitMode    = true;  // 凑整铺满
 
 const cv  = document.getElementById("c");
 const ctx = cv.getContext("2d");
@@ -276,7 +284,7 @@ function boxOf(o) {
   return { x: o.x, y: o.y + o.h - h, w: o.w, h: h };
 }
 
-/* 铺一片区域。t = { s, c, r, loop, fit } */
+/* 铺一片区域。t = { s, c, r, lc, lr, fit } */
 function tileArea(t, x0, y0, x1, y1) {
   if (!t) return false;
   const sh = SHEET_BY[t.s];
@@ -294,19 +302,22 @@ function tileArea(t, x0, y0, x1, y1) {
     th = hArea / rows;
   }
 
-  const lp = Math.max(1, t.loop || 1);
+  const lc = Math.max(1, t.lc || 1);
+  const lr = Math.max(1, t.lr || 1);
+
   const nCols = Math.ceil(wArea / tw);
   const nRows = Math.ceil(hArea / th);
 
   for (let j = 0; j < nRows; j++) {
-    const row = (t.r + (j % lp)) % sh.rows;
+    const row = (t.r + (j % lr)) % sh.rows;
     const sy  = row * 32;
     const dy  = y0 + j * th;
     const dh  = Math.min(th, y1 - dy);
     for (let i = 0; i < nCols; i++) {
-      const sx = t.c * 32;
-      const dx = x0 + i * tw;
-      const dw = Math.min(tw, x1 - dx);
+      const col = (t.c + (i % lc)) % sh.cols;
+      const sx  = col * 32;
+      const dx  = x0 + i * tw;
+      const dw  = Math.min(tw, x1 - dx);
       ctx.drawImage(s.el, sx, sy, dw, dh, dx, dy, dw, dh);
     }
   }
@@ -421,8 +432,8 @@ function updateSwatch() {
   if (!cur) { sp.textContent = "还没铺，下面点一格"; return; }
   const s = sheetOf(SHEET_BY[cur.s]);
   if (s.ok) g.drawImage(s.el, cur.c * 32, cur.r * 32, 32, 32, 0, 0, 32, 32);
-  sp.textContent = SHEET_BY[cur.s].label + " 第 " + cur.c + " 列 / 第 " + cur.r + " 行　循环 " +
-                   (cur.loop || 1) + " 行" + (cur.fit ? "　凑整" : "");
+  sp.textContent = SHEET_BY[cur.s].label + " 第 " + cur.c + " 列 / 第 " + cur.r + " 行　一块 " +
+                   (cur.lc || 1) + "×" + (cur.lr || 1) + (cur.fit ? "　凑整" : "");
 }
 
 function buildAtlas() {
@@ -431,7 +442,7 @@ function buildAtlas() {
   const hint = document.createElement("div");
   hint.className = "hint";
   hint.textContent = "点一格 → 铺到「" + ROOM_BY_KEY[curRoom].label + "」的" + (baseTarget === "wall" ? "墙" : "地板") +
-                     "上　·　按住拖动可以平移大表";
+                     "上　·　按住拖动可平移大表";
   lib.appendChild(hint);
 
   const st = document.createElement("div");
@@ -459,10 +470,9 @@ function buildAtlas() {
   box.appendChild(ac);
   lib.appendChild(box);
 
-  /* 点 = 选；拖动 = 平移 */
   let pan = null;
   ac.addEventListener("pointerdown", (ev) => {
-    pan = { x: ev.clientX, y: ev.clientY, l: box.scrollLeft, t: box.scrollTop, moved: false };
+    pan = { x: ev.clientX, y: ev.clientY, l: box.scrollLeft, t: box.scrollTop, moved:false };
     try { ac.setPointerCapture(ev.pointerId); } catch (e) {}
   });
   ac.addEventListener("pointermove", (ev) => {
@@ -480,7 +490,7 @@ function buildAtlas() {
     const c  = Math.floor((ev.clientX - r.left) / atlasTile);
     const rr = Math.floor((ev.clientY - r.top ) / atlasTile);
     if (c < 0 || rr < 0 || c >= sh.cols || rr >= sh.rows) return;
-    DATA[curRoom][baseTarget] = { s: sheetKey, c: c, r: rr, loop: loopRows, fit: fitMode };
+    DATA[curRoom][baseTarget] = { s: sheetKey, c: c, r: rr, lc: loopCols, lr: loopRows, fit: fitMode };
     draw(); render(); drawAtlas(); updateSwatch();
   });
   ac.addEventListener("pointercancel", () => { pan = null; });
@@ -515,9 +525,16 @@ function drawAtlas() {
 
   const cur = DATA[curRoom][baseTarget];
   if (cur && cur.s === sheetKey) {
-    const lp = Math.max(1, cur.loop || 1);
+    const lc = Math.max(1, cur.lc || 1);
+    const lr = Math.max(1, cur.lr || 1);
+    g.save();
     g.strokeStyle = "#ffd696"; g.lineWidth = 2;
-    g.strokeRect(cur.c * atlasTile + 1, cur.r * atlasTile + 1, atlasTile - 2, atlasTile * lp - 2);
+    g.strokeRect(cur.c * atlasTile + 1, cur.r * atlasTile + 1,
+                 atlasTile * lc - 2, atlasTile * lr - 2);
+    g.strokeStyle = "rgba(255,214,150,.35)"; g.lineWidth = 1;
+    g.strokeRect(cur.c * atlasTile + 3, cur.r * atlasTile + 3,
+                 atlasTile * lc - 6, atlasTile * lr - 6);
+    g.restore();
   }
 }
 
@@ -584,6 +601,7 @@ document.getElementById("front").addEventListener("click", () => {
 const mFur    = document.getElementById("mFur");
 const mBase   = document.getElementById("mBase");
 const baseCtl = document.getElementById("baseCtl");
+const baseCtl2= document.getElementById("baseCtl2");
 const toolRow = document.getElementById("toolRow");
 const themeSel= document.getElementById("theme");
 const tipEl   = document.getElementById("tip");
@@ -593,13 +611,14 @@ function setMode(m) {
   const isBase = (m === "base");
   mFur.classList.toggle("on", !isBase);
   mBase.classList.toggle("on", isBase);
-  baseCtl.style.display = isBase ? "flex" : "none";
-  toolRow.style.display = isBase ? "none" : "flex";
+  baseCtl.style.display  = isBase ? "flex" : "none";
+  baseCtl2.style.display = isBase ? "flex" : "none";
+  toolRow.style.display  = isBase ? "none" : "flex";
   themeSel.style.display = isBase ? "none" : "";
   document.body.classList.toggle("base", isBase);
 
   if (isBase) {
-    tipEl.textContent = "「循环几行」是重点：整块墙纸竖着占几行，就循环几行。看全＝缩到一张全看得见；大表按住能拖。";
+    tipEl.textContent = "重点是「横着几列 / 竖着几行」：那块墙纸横竖各占几格，就填几格。填 1×1 会一格一格断开。对不齐就用「行 ↑ ↓」一格一格试。";
     sel = -1;
     buildAtlas();
   } else {
@@ -625,9 +644,28 @@ function setTarget(t) {
 tWall.addEventListener("click", () => setTarget("wall"));
 tFloor.addEventListener("click", () => setTarget("floor"));
 
-/* 循环几行 */
-const loopSel = document.getElementById("loop");
-loopSel.addEventListener("change", () => { loopRows = Number(loopSel.value) || 1; });
+/* 一块的大小 */
+const lcSel = document.getElementById("lc");
+const lrSel = document.getElementById("lr");
+function applySize() {
+  const cur = DATA[curRoom][baseTarget];
+  if (!cur) return;
+  cur.lc = loopCols; cur.lr = loopRows;
+  draw(); render(); drawAtlas(); updateSwatch();
+}
+lcSel.addEventListener("change", () => { loopCols = Number(lcSel.value) || 1; applySize(); });
+lrSel.addEventListener("change", () => { loopRows = Number(lrSel.value) || 1; applySize(); });
+
+/* 起点行上下挪 */
+function nudgeRow(d) {
+  const cur = DATA[curRoom][baseTarget];
+  if (!cur) return;
+  const sh = SHEET_BY[cur.s];
+  cur.r = (cur.r + d + sh.rows) % sh.rows;
+  draw(); render(); drawAtlas(); updateSwatch();
+}
+document.getElementById("rowUp").addEventListener("click", () => nudgeRow(-1));
+document.getElementById("rowDn").addEventListener("click", () => nudgeRow(1));
 
 /* 凑整铺满 */
 const fitBtn = document.getElementById("fit");
@@ -653,7 +691,7 @@ function setZoom(t) { atlasTile = t; buildAtlas(); }
 function fitAll() {
   const sh = SHEET_BY[sheetKey];
   const avail = Math.max(120, lib.clientWidth - 20);
-  atlasTile = Math.max(4, Math.floor(avail / sh.cols));
+  atlasTile = Math.max(3, Math.floor(avail / sh.cols));
   buildAtlas();
 }
 document.getElementById("zAll").addEventListener("click", fitAll);
@@ -681,14 +719,17 @@ copyBtn.addEventListener("click", async () => {
 });
 
 /* ---------- 清单输出 ---------- */
+function part(o) {
+  if (!o) return "";
+  return o.s + '", c:' + o.c + ', r:' + o.r + ', lc:' + (o.lc || 1) + ', lr:' + (o.lr || 1) +
+         (o.fit ? ", fit:true" : "") ;
+}
 function render() {
   const d = DATA[curRoom];
   const L = ["// " + ROOM_BY_KEY[curRoom].label];
   const b = [];
-  if (d.wall)  b.push('wall:{ s:"'  + d.wall.s  + '", c:' + d.wall.c  + ', r:' + d.wall.r  +
-                      ', loop:' + (d.wall.loop  || 1) + (d.wall.fit  ? ", fit:true" : "") + ' }');
-  if (d.floor) b.push('floor:{ s:"' + d.floor.s + '", c:' + d.floor.c + ', r:' + d.floor.r +
-                      ', loop:' + (d.floor.loop || 1) + (d.floor.fit ? ", fit:true" : "") + ' }');
+  if (d.wall)  b.push('wall:{ s:"'  + part(d.wall)  + ' }');
+  if (d.floor) b.push('floor:{ s:"' + part(d.floor) + ' }');
   if (b.length) L.push("base: { " + b.join(", ") + " },");
   if (d.items.length) {
     L.push("items: [");
