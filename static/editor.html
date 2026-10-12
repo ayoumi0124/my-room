@@ -54,6 +54,8 @@
     <button id="tWall" class="on">贴墙</button>
     <button id="tFloor">贴地</button>
     <select id="sheet"></select>
+    <button id="kFlat">一格格平铺</button>
+    <button id="kCol" class="on">整列往下铺</button>
     <button id="zS">小</button>
     <button id="zM">中</button>
     <button id="zL">大</button>
@@ -87,22 +89,23 @@
    两种模式：
      摆家具 —— 左边图库 → 点进右边屋子 → 拖位置 → 出来是 items
      铺墙地 —— 左边是一张 Room_Builder 大表，点一格 → 铺到当前房间 → 出来是 base
+
+   铺法两种（12 号下午她说「全墙一格格有点怪」之后加的）：
+     flat 一格格平铺  —— 只用点中的那一格，横竖都重复
+     col  整列往下铺  —— 从点中那一行开始，同一列一行一行往下走，铺满了再从头来
+                         （整套墙纸本来就是一张竖着的长条，用这个才连得上）
+
    坐标跟 house.html 一致：x=左, y=顶, w=显示宽, h=到底边的框
    素材：Tiles by LimeZu —— https://limezu.itch.io/
    注意：作者把 Builder 拼成 Bulder（少一个 i）。下面 RB_LIST 会两种都试一遍。
-
-   12 号下午修的一个卡顿：
-     原来「加载完成的回调」里又去调自己，表已经在缓存里时会立刻同步回调，
-     于是无限递归 → 页面卡死。现在改成 scheduleUi()：回调里只做一次小的重画。
    ============================================================ */
 
 const W = 360, H = 640, WALL_Y = 150;
 const FLOOR = { x0: 12, x1: 348, y0: WALL_Y, y1: 570 };
-const TILE = 32;                    // 墙 / 地板一块在屋子坐标里占多少
+const TILE = 32;
 
 /* ---------- 家具图库 ---------- */
 const BASE = "tiles/1_Interiors/32x32/Theme_Sorter_Singles_32x32/";
-/* pre 是文件前缀。扫不到的号会自动跳过，所以写多列几个不影响。 */
 const THEMES = [
   { key:"living",     label:"客厅",      dir:"2_Living_Room_Singles_32x32",                pre:"Living_Room_Singles_32x32_",                max:220 },
   { key:"bedroom",    label:"卧室",      dir:"4_Bedroom_Singles_32x32",                    pre:"Bedroom_Singles_32x32_",                    max:600 },
@@ -132,8 +135,7 @@ const THEMES = [
 const THEME_BY_KEY = Object.fromEntries(THEMES.map(t => [t.key, t]));
 const urlOf = (c, n) => BASE + THEME_BY_KEY[c].dir + "/" + THEME_BY_KEY[c].pre + n + ".png";
 
-/* ---------- 墙 / 地板素材表 ----------
-   路径写三份，第一个读不到就自动试下一个。 */
+/* ---------- 墙 / 地板素材表 ---------- */
 const RB_LIST = [
   "tiles/1_Interiors/32x32/Room_Bulder_subfiles_32x32/",
   "tiles/1_Interiors/32x32/Room_Builder_subfiles_32x32/",
@@ -166,7 +168,8 @@ let sel        = -1;
 let mode       = "furniture";   // furniture | base
 let baseTarget = "wall";        // wall | floor
 let sheetKey   = "walls";
-let atlasTile  = 20;            // 大表上一格占多少屏幕像素
+let atlasTile  = 20;
+let tileKind   = "col";         // flat | col   墙默认整列，地板默认平铺
 
 const cv  = document.getElementById("c");
 const ctx = cv.getContext("2d");
@@ -216,17 +219,12 @@ function sheetOf(sh) {
   return s;
 }
 
-/* 所有「东西加载好了要重画」的地方都走这里。
-   同一刻只跑一次，而且绝不回头去调调用者 —— 这是 12 号卡顿的根。 */
 let uiTimer = null;
 function scheduleUi() {
   if (uiTimer) return;
   uiTimer = setTimeout(() => {
     uiTimer = null;
-    draw();
-    drawAtlas();
-    updateStatusLine();
-    updateSwatch();
+    draw(); drawAtlas(); updateStatusLine(); updateSwatch();
   }, 0);
 }
 
@@ -260,15 +258,19 @@ function boxOf(o) {
   return { x: o.x, y: o.y + o.h - h, w: o.w, h: h };
 }
 
-/* 把一块 32×32 平铺到一片区域（只查缓存，不注册回调） */
+/* 铺一片区域
+   t = { s, c, r, m:"flat"|"col" } */
 function tileArea(t, x0, y0, x1, y1) {
   if (!t) return false;
   const sh = SHEET_BY[t.s];
   if (!sh) return false;
   const s = sheetOf(sh);
   if (!s.ok) return false;
-  const sx = t.c * 32, sy = t.r * 32;
-  for (let y = y0; y < y1; y += TILE) {
+
+  let k = 0;
+  for (let y = y0; y < y1; y += TILE, k++) {
+    const row = (t.m === "col") ? ((t.r + k) % sh.rows) : t.r;
+    const sx = t.c * 32, sy = row * 32;
     for (let x = x0; x < x1; x += TILE) {
       const w = Math.min(TILE, x1 - x);
       const h = Math.min(TILE, y1 - y);
@@ -282,7 +284,6 @@ function drawRoomBg() {
   const R = ROOM_BY_KEY[curRoom];
   const d = DATA[curRoom];
 
-  /* 墙 */
   if (!tileArea(d.wall, 0, 0, W, WALL_Y)) {
     const wg = ctx.createLinearGradient(0, 0, 0, WALL_Y);
     wg.addColorStop(0, R.wall[0]); wg.addColorStop(1, R.wall[1]);
@@ -291,7 +292,6 @@ function drawRoomBg() {
   ctx.fillStyle = "rgba(0,0,0,.10)";
   ctx.fillRect(0, WALL_Y - 8, W, 8);
 
-  /* 地板 */
   if (!tileArea(d.floor, 0, WALL_Y, W, FLOOR.y1)) {
     const fg = ctx.createLinearGradient(0, WALL_Y, 0, FLOOR.y1);
     fg.addColorStop(0, R.floor[0]); fg.addColorStop(1, R.floor[1]);
@@ -301,7 +301,6 @@ function drawRoomBg() {
     for (let i = 0; i < 9; i++) { const x = 24 + i * 44; ctx.beginPath(); ctx.moveTo(x, WALL_Y); ctx.lineTo(x, FLOOR.y1); ctx.stroke(); }
   }
 
-  /* 铺墙地模式下画一层格线，方便对缝 */
   if (mode === "base") {
     ctx.save();
     ctx.strokeStyle = "rgba(255,214,150,.14)"; ctx.lineWidth = 1;
@@ -389,7 +388,8 @@ function updateSwatch() {
   if (!cur) { sp.textContent = "还没铺，下面点一格"; return; }
   const s = sheetOf(SHEET_BY[cur.s]);
   if (s.ok) g.drawImage(s.el, cur.c * 32, cur.r * 32, 32, 32, 0, 0, 32, 32);
-  sp.textContent = SHEET_BY[cur.s].label + " 第 " + cur.c + " 列 / 第 " + cur.r + " 行";
+  sp.textContent = SHEET_BY[cur.s].label + " 第 " + cur.c + " 列 / 第 " + cur.r + " 行　" +
+                   (cur.m === "col" ? "整列往下" : "一格格");
 }
 
 function buildAtlas() {
@@ -430,14 +430,14 @@ function buildAtlas() {
     const c  = Math.floor((ev.clientX - r.left) / atlasTile);
     const rr = Math.floor((ev.clientY - r.top ) / atlasTile);
     if (c < 0 || rr < 0 || c >= sh.cols || rr >= sh.rows) return;
-    DATA[curRoom][baseTarget] = { s: sheetKey, c: c, r: rr };
+    DATA[curRoom][baseTarget] = { s: sheetKey, c: c, r: rr, m: tileKind };
     draw(); render(); drawAtlas(); updateSwatch();
   });
 
   drawAtlas();
   updateStatusLine();
   updateSwatch();
-  sheetOf(sh);                 // 没加载就去加载；加载好会自己走 scheduleUi 重画
+  sheetOf(sh);
 }
 
 function drawAtlas() {
@@ -466,6 +466,10 @@ function drawAtlas() {
   if (cur && cur.s === sheetKey) {
     g.strokeStyle = "#ffd696"; g.lineWidth = 2;
     g.strokeRect(cur.c * atlasTile + 1, cur.r * atlasTile + 1, atlasTile - 2, atlasTile - 2);
+    if (cur.m === "col") {
+      g.strokeStyle = "rgba(255,214,150,.45)"; g.lineWidth = 1;
+      g.strokeRect(cur.c * atlasTile + 3, cur.r * atlasTile + 3, atlasTile - 6, atlasTile - 6);
+    }
   }
 }
 
@@ -547,7 +551,7 @@ function setMode(m) {
   document.body.classList.toggle("base", isBase);
 
   if (isBase) {
-    tipEl.textContent = "选「贴墙」或「贴地」→ 左边大表点一格 → 立刻铺上。不满意再点一格；想清掉就按「清掉这一层」。";
+    tipEl.textContent = "「整列往下铺」适合墙纸（连得上），「一格格平铺」适合地板。点大表一格就铺上，不满意再点一格。";
     sel = -1;
     buildAtlas();
   } else {
@@ -562,16 +566,28 @@ mBase.addEventListener("click", () => setMode("base"));
 /* 贴哪儿 */
 const tWall  = document.getElementById("tWall");
 const tFloor = document.getElementById("tFloor");
-tWall.addEventListener("click", () => {
-  baseTarget = "wall";
-  tWall.classList.add("on"); tFloor.classList.remove("on");
+function setTarget(t) {
+  baseTarget = t;
+  tWall.classList.toggle("on", t === "wall");
+  tFloor.classList.toggle("on", t === "floor");
+  tileKind = (t === "wall") ? "col" : "flat";
+  setKindButtons();
+  sheetKey = (t === "wall") ? "walls" : "floors";
+  sheetSel.value = sheetKey;
   buildAtlas();
-});
-tFloor.addEventListener("click", () => {
-  baseTarget = "floor";
-  tFloor.classList.add("on"); tWall.classList.remove("on");
-  buildAtlas();
-});
+}
+tWall.addEventListener("click", () => setTarget("wall"));
+tFloor.addEventListener("click", () => setTarget("floor"));
+
+/* 铺法 */
+const kFlat = document.getElementById("kFlat");
+const kCol  = document.getElementById("kCol");
+function setKindButtons() {
+  kFlat.classList.toggle("on", tileKind === "flat");
+  kCol.classList.toggle("on",  tileKind === "col");
+}
+kFlat.addEventListener("click", () => { tileKind = "flat"; setKindButtons(); });
+kCol.addEventListener("click",  () => { tileKind = "col";  setKindButtons(); });
 
 /* 换素材表 */
 const sheetSel = document.getElementById("sheet");
@@ -612,8 +628,8 @@ function render() {
   const d = DATA[curRoom];
   const L = ["// " + ROOM_BY_KEY[curRoom].label];
   const b = [];
-  if (d.wall)  b.push('wall:{ s:"'  + d.wall.s  + '", c:' + d.wall.c  + ', r:' + d.wall.r  + ' }');
-  if (d.floor) b.push('floor:{ s:"' + d.floor.s + '", c:' + d.floor.c + ', r:' + d.floor.r + ' }');
+  if (d.wall)  b.push('wall:{ s:"'  + d.wall.s  + '", c:' + d.wall.c  + ', r:' + d.wall.r  + ', m:"' + (d.wall.m  || "flat") + '" }');
+  if (d.floor) b.push('floor:{ s:"' + d.floor.s + '", c:' + d.floor.c + ', r:' + d.floor.r + ', m:"' + (d.floor.m || "flat") + '" }');
   if (b.length) L.push("base: { " + b.join(", ") + " },");
   if (d.items.length) {
     L.push("items: [");
