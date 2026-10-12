@@ -16,6 +16,7 @@
     border:1px solid var(--line);border-radius:7px;padding:5px 9px}
   button:active{background:#2a2733}
   button.hot{background:#3a4a63;border-color:#4a5f80}
+  button.on{background:#4a3f2a;border-color:var(--hot)}
   .wrap{display:flex;height:calc(100% - 92px)}
   .lib{width:118px;flex:none;overflow-y:auto;border-right:1px solid var(--line);
     padding:6px;display:grid;grid-template-columns:1fr 1fr;gap:5px;align-content:start}
@@ -24,8 +25,12 @@
   .lib .cell:active{border-color:var(--hot)}
   .lib .cell img{image-rendering:pixelated;width:100%;height:38px;object-fit:contain;display:block;pointer-events:none}
   .lib .cell b{display:block;font-size:9px;color:var(--dim);font-weight:500;pointer-events:none}
+  /* 铺墙地模式：左栏变宽，放素材大表 */
+  body.base .lib{display:block;width:296px;overflow:auto;padding:6px}
+  .lib .hint{font-size:11px;color:var(--dim);margin:2px 0 6px}
   .stage{flex:1;display:flex;align-items:center;justify-content:center;background:#0e0d12;overflow:hidden}
   canvas{display:block;touch-action:none}
+  .stage canvas{image-rendering:pixelated}
   footer{border-top:1px solid var(--line);padding:6px 10px;display:flex;gap:6px;
     align-items:center;background:rgba(20,19,26,.96)}
   textarea{flex:1;height:52px;background:#11101a;color:#b8f0c0;border:1px solid var(--line);
@@ -37,7 +42,15 @@
 <header>
   <div class="row">
     <select id="room"></select>
-    <select id="theme"></select>
+    <button id="mFur" class="on">摆家具</button>
+    <button id="mBase">铺墙地</button>
+    <span id="baseCtl" style="display:none;gap:6px;align-items:center">
+      <button id="tWall" class="on">贴墙</button>
+      <button id="tFloor">贴地</button>
+      <select id="sheet"></select>
+    </span>
+  </div>
+  <div class="row" id="toolRow" style="margin-top:6px">
     <button id="del">删掉选中</button>
     <button id="narrow">◀ 窄</button>
     <button id="wide">宽 ▶</button>
@@ -46,7 +59,7 @@
     <button id="front">▲ 前</button>
     <button class="hot" id="copy">复制清单</button>
   </div>
-  <div class="tip">左边点一下 → 进屋子；拖屋里那件 → 挪位置；点中会亮黄边。</div>
+  <div class="tip" id="tip">左边点一下 → 进屋子；拖屋里那件 → 挪位置；点中会亮黄边。</div>
 </header>
 
 <div class="wrap">
@@ -62,14 +75,19 @@
 "use strict";
 /* ============================================================
    摆家 · editor
-   左边图库 → 点进右边屋子 → 拖位置 → 底下出清单
-   坐标跟 house.html 完全一致：x=左, y=顶, w=显示宽, h=到底边的框
+   两种模式：
+     ★ 摆家具 —— 左边图库 → 点进右边屋子 → 拖位置 → 出来是 items
+     ★ 铺墙地 —— 左边是一张 Room_Builder 大表，点一块 → 铺到当前房间 → 出来是 base
+   坐标跟 house.html 一致：x=左, y=顶, w=显示宽, h=到底边的框
    素材：Tiles by LimeZu — https://limezu.itch.io/
+   注意：作者把 Builder 拼成了 Bulder（少一个 i），路径照原样写。
    ============================================================ */
 
 const W = 360, H = 640, WALL_Y = 150;
 const FLOOR = { x0: 12, x1: 348, y0: WALL_Y, y1: 570 };
+const TILE = 32;   // 墙/地板一块在屋子坐标里占多少
 
+/* ---------- 家具图库 ---------- */
 const BASE = "tiles/1_Interiors/32x32/Theme_Sorter_Singles_32x32/";
 /* pre 是文件前缀。扫不到的号会自动跳过，所以写多列几个不影响。 */
 const THEMES = [
@@ -101,17 +119,36 @@ const THEMES = [
 const THEME_BY_KEY = Object.fromEntries(THEMES.map(t => [t.key, t]));
 const urlOf = (c, n) => BASE + THEME_BY_KEY[c].dir + "/" + THEME_BY_KEY[c].pre + n + ".png";
 
+/* ---------- 墙 / 地板素材表（Room_Builder 那几张） ---------- */
+const RB = "tiles/1_Interiors/32x32/Room_Bulder_subfiles_32x32/";
+const SHEETS = [
+  { key:"walls",  label:"墙纸",     file:"Room_Builder_Walls_32x32.png",         cols:32, rows:40 },
+  { key:"floors", label:"地板",     file:"Room_Builder_Floors_32x32.png",        cols:15, rows:40 },
+  { key:"shadow", label:"墙脚阴影", file:"Room_Builder_Floor_Shadows_32x32.png", cols:16, rows:5  },
+  { key:"base",   label:"踢脚线",   file:"Room_Builder_baseboards_32x32.png",    cols:6,  rows:6  }
+];
+const SHEET_BY = Object.fromEntries(SHEETS.map(s => [s.key, s]));
+
+/* ---------- 房间 ---------- */
 const ROOMS = [
   { key:"living",  label:"客厅", wall:["#efe1cd","#e3d2ba"], floor:["#d8b98e","#c8a575"], line:"rgba(150,118,80,.35)" },
   { key:"study",   label:"书房", wall:["#e7e1d3","#d9d1c0"], floor:["#c9b699","#b8a37f"], line:"rgba(130,105,70,.35)" },
-  { key:"kitchen", label:"厨房", wall:["#e9efd6","#dbe4c2"], floor:["#ded5c4","#cdc2ac"], line:"rgba(140,120,90,.3)" },
-  { key:"garden",  label:"花园", wall:["#cfe6c4","#b0d69e"], floor:["#95c476","#7fb262"], line:"rgba(80,130,60,.35)" }
+  { key:"bedroom", label:"卧室", wall:["#e9e2ea","#dcd2dd"], floor:["#cbb6a0","#b8a08a"], line:"rgba(140,110,90,.32)" },
+  { key:"kitchen", label:"厨房", wall:["#e9efd6","#dbe4c2"], floor:["#ded5c4","#cdc2ac"], line:"rgba(140,120,90,.3)"  },
+  { key:"cat",     label:"猫窝", wall:["#f0e6d8","#e2d4c0"], floor:["#e0cbaa","#d0b894"], line:"rgba(150,120,80,.32)" },
+  { key:"garden",  label:"花园", wall:["#cfe6c4","#b0d69e"], floor:["#95c476","#7fb262"], line:"rgba(80,130,60,.35)"  }
 ];
 const ROOM_BY_KEY = Object.fromEntries(ROOMS.map(r => [r.key, r]));
 
-const DATA = { living:[], study:[], kitchen:[], garden:[] };
+const DATA = {};
+ROOMS.forEach(r => { DATA[r.key] = { wall:null, floor:null, items:[] }; });
+
 let curRoom = "living";
 let sel = -1;
+let mode = "furniture";     // furniture | base
+let baseTarget = "wall";    // wall | floor
+let sheetKey = "walls";
+let atlasTile = 24;         // 大表上一格多少像素
 
 const cv = document.getElementById("c");
 const ctx = cv.getContext("2d");
@@ -119,15 +156,17 @@ ctx.imageSmoothingEnabled = false;
 const lib = document.getElementById("lib");
 const out = document.getElementById("out");
 
+/* ---------- 图片缓存 ---------- */
 const IMG = Object.create(null);
-function getImg(c, n, cb) {
-  const u = urlOf(c, n);
+function getImg(u, cb) {
   let e = IMG[u];
   if (!e) { e = IMG[u] = { ok:false, el:new Image() }; e.el.onload = () => { e.ok = true; cb && cb(); }; e.el.onerror = () => { e.ok = false; }; e.el.src = u; }
-  else if (cb) cb();
+  else if (cb) e.ok ? cb() : null;
   return e;
 }
+function getSheetImg(sh, cb) { return getImg(RB + sh.file, cb); }
 
+/* ---------- 屋子画布 ---------- */
 let scale = 1;
 function fit() {
   const st = cv.parentElement.getBoundingClientRect();
@@ -149,37 +188,74 @@ function toWorld(ev) {
 }
 
 function boxOf(o) {
-  const e = getImg(o.c, o.n);
+  const e = getImg(urlOf(o.c, o.n));
   if (o.stretch) return { x:o.x, y:o.y, w:o.w, h:o.h };
   const iw = (e.el.naturalWidth || 32), ih = (e.el.naturalHeight || 32);
   const h = o.w * ih / iw;
   return { x: o.x, y: o.y + o.h - h, w: o.w, h: h };
 }
+
+/* 把一块 32×32 平铺到区域里 */
+function tileArea(t, x0, y0, x1, y1) {
+  if (!t) return false;
+  const sh = SHEET_BY[t.s];
+  if (!sh) return false;
+  const e = getSheetImg(sh, () => draw());
+  if (!e.ok) return false;
+  const sx = t.c * 32, sy = t.r * 32;
+  for (let y = y0; y < y1; y += TILE) {
+    for (let x = x0; x < x1; x += TILE) {
+      const w = Math.min(TILE, x1 - x), h = Math.min(TILE, y1 - y);
+      ctx.drawImage(e.el, sx, sy, w, h, x, y, w, h);
+    }
+  }
+  return true;
+}
+
 function drawRoomBg() {
   const R = ROOM_BY_KEY[curRoom];
-  const wg = ctx.createLinearGradient(0, 0, 0, WALL_Y);
-  wg.addColorStop(0, R.wall[0]); wg.addColorStop(1, R.wall[1]);
-  ctx.fillStyle = wg; ctx.fillRect(0, 0, W, WALL_Y);
+  const d = DATA[curRoom];
+
+  // 墙
+  if (!tileArea(d.wall, 0, 0, W, WALL_Y)) {
+    const wg = ctx.createLinearGradient(0, 0, 0, WALL_Y);
+    wg.addColorStop(0, R.wall[0]); wg.addColorStop(1, R.wall[1]);
+    ctx.fillStyle = wg; ctx.fillRect(0, 0, W, WALL_Y);
+  }
   ctx.fillStyle = "rgba(0,0,0,.10)"; ctx.fillRect(0, WALL_Y - 8, W, 8);
-  const fg = ctx.createLinearGradient(0, WALL_Y, 0, FLOOR.y1);
-  fg.addColorStop(0, R.floor[0]); fg.addColorStop(1, R.floor[1]);
-  ctx.fillStyle = fg; ctx.fillRect(0, WALL_Y, W, FLOOR.y1 - WALL_Y);
-  ctx.strokeStyle = R.line; ctx.lineWidth = 1;
-  for (let y = WALL_Y + 26; y < FLOOR.y1; y += 26) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
-  for (let i = 0; i < 9; i++) { const x = 24 + i * 44; ctx.beginPath(); ctx.moveTo(x,WALL_Y); ctx.lineTo(x,FLOOR.y1); ctx.stroke(); }
+
+  // 地板
+  if (!tileArea(d.floor, 0, WALL_Y, W, FLOOR.y1)) {
+    const fg = ctx.createLinearGradient(0, WALL_Y, 0, FLOOR.y1);
+    fg.addColorStop(0, R.floor[0]); fg.addColorStop(1, R.floor[1]);
+    ctx.fillStyle = fg; ctx.fillRect(0, WALL_Y, W, FLOOR.y1 - WALL_Y);
+    ctx.strokeStyle = R.line; ctx.lineWidth = 1;
+    for (let y = WALL_Y + 26; y < FLOOR.y1; y += 26) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke(); }
+    for (let i = 0; i < 9; i++) { const x = 24 + i * 44; ctx.beginPath(); ctx.moveTo(x,WALL_Y); ctx.lineTo(x,FLOOR.y1); ctx.stroke(); }
+  }
+
+  // 铺墙地模式下，画一层格线，方便对缝
+  if (mode === "base") {
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,214,150,.14)"; ctx.lineWidth = 1;
+    for (let x = 0; x <= W; x += TILE) { ctx.beginPath(); ctx.moveTo(x+.5,0); ctx.lineTo(x+.5,FLOOR.y1); ctx.stroke(); }
+    for (let y = 0; y <= FLOOR.y1; y += TILE) { ctx.beginPath(); ctx.moveTo(0,y+.5); ctx.lineTo(W,y+.5); ctx.stroke(); }
+    ctx.restore();
+  }
 }
+
 function draw() {
   ctx.clearRect(0, 0, W, H);
   ctx.fillStyle = "#14131a"; ctx.fillRect(0, 0, W, H);
   drawRoomBg();
-  const list = DATA[curRoom];
+  const list = DATA[curRoom].items;
   for (let i = 0; i < list.length; i++) {
     const o = list[i];
     const b = boxOf(o);
-    const e = getImg(o.c, o.n);
+    const e = getImg(urlOf(o.c, o.n));
     if (e.ok) ctx.drawImage(e.el, b.x, b.y, b.w, b.h);
     else { ctx.save(); ctx.globalAlpha = .25; ctx.fillStyle = "#c79b6d"; ctx.fillRect(b.x, b.y, b.w, Math.max(10, b.h)); ctx.restore(); }
-    if (i === sel) {
+    if (mode === "furniture" && i === sel) {
       ctx.save();
       ctx.strokeStyle = "#ffd696"; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
       ctx.strokeRect(b.x - 1, b.y - 1, b.w + 2, b.h + 2);
@@ -193,6 +269,7 @@ function draw() {
   ctx.restore();
 }
 
+/* ---------- 家具图库 ---------- */
 let scanToken = 0;
 function scan(themeKey) {
   const T = THEME_BY_KEY[themeKey];
@@ -216,17 +293,71 @@ function addCell(key, num, u) {
   const b = document.createElement("b"); b.textContent = num;
   d.appendChild(gi); d.appendChild(b);
   d.addEventListener("click", () => {
-    DATA[curRoom].push({ c:key, n:num, x: 120, y: 380, w: 96, h: 90, stretch:false });
-    sel = DATA[curRoom].length - 1;
+    DATA[curRoom].items.push({ c:key, n:num, x: 120, y: 380, w: 96, h: 90, stretch:false });
+    sel = DATA[curRoom].items.length - 1;
     draw(); render();
   });
   lib.appendChild(d);
 }
 
+/* ---------- 墙地大表 ---------- */
+function buildAtlas() {
+  lib.innerHTML = "";
+  const hint = document.createElement("div");
+  hint.className = "hint";
+  hint.textContent = "点一格 → 铺到当前房间的" + (baseTarget === "wall" ? "墙" : "地板") + "上";
+  lib.appendChild(hint);
+
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "display:block;overflow:auto;max-width:100%";
+  const ac = document.createElement("canvas");
+  ac.id = "ac";
+  ac.style.cssText = "image-rendering:pixelated;display:block";
+  wrap.appendChild(ac);
+  lib.appendChild(wrap);
+
+  const sh = SHEET_BY[sheetKey];
+  const w = sh.cols * atlasTile, h = sh.rows * atlasTile;
+  ac.width = w; ac.height = h;
+  ac.style.width = w + "px"; ac.style.height = h + "px";
+  drawAtlas();
+
+  ac.addEventListener("click", (ev) => {
+    const r = ac.getBoundingClientRect();
+    const c = Math.floor((ev.clientX - r.left) / atlasTile);
+    const rr = Math.floor((ev.clientY - r.top) / atlasTile);
+    if (c < 0 || rr < 0 || c >= sh.cols || rr >= sh.rows) return;
+    DATA[curRoom][baseTarget] = { s: sheetKey, c, r: rr };
+    draw(); render(); drawAtlas();
+  });
+}
+function drawAtlas() {
+  const ac = document.getElementById("ac");
+  if (!ac) return;
+  const sh = SHEET_BY[sheetKey];
+  const g = ac.getContext("2d");
+  g.imageSmoothingEnabled = false;
+  const w = ac.width, h = ac.height;
+  g.clearRect(0, 0, w, h);
+  g.fillStyle = "#1a1922"; g.fillRect(0, 0, w, h);
+  const e = getSheetImg(sh, () => drawAtlas());
+  if (e.ok) g.drawImage(e.el, 0, 0, w, h);
+  g.strokeStyle = "rgba(255,214,150,.16)"; g.lineWidth = 1;
+  for (let c = 0; c <= sh.cols; c++) { g.beginPath(); g.moveTo(c*atlasTile+.5, 0); g.lineTo(c*atlasTile+.5, h); g.stroke(); }
+  for (let r = 0; r <= sh.rows; r++) { g.beginPath(); g.moveTo(0, r*atlasTile+.5); g.lineTo(w, r*atlasTile+.5); g.stroke(); }
+  const cur = DATA[curRoom][baseTarget];
+  if (cur && cur.s === sheetKey) {
+    g.strokeStyle = "#ffd696"; g.lineWidth = 2;
+    g.strokeRect(cur.c*atlasTile+1, cur.r*atlasTile+1, atlasTile-2, atlasTile-2);
+  }
+}
+
+/* ---------- 拖拽（只在摆家具模式生效） ---------- */
 let drag = null;
 cv.addEventListener("pointerdown", (ev) => {
+  if (mode !== "furniture") return;
   const p = toWorld(ev);
-  const list = DATA[curRoom];
+  const list = DATA[curRoom].items;
   for (let i = list.length - 1; i >= 0; i--) {
     const b = boxOf(list[i]);
     if (p.x > b.x - 6 && p.x < b.x + b.w + 6 && p.y > b.y - 6 && p.y < b.y + b.h + 6) {
@@ -242,7 +373,7 @@ cv.addEventListener("pointerdown", (ev) => {
 cv.addEventListener("pointermove", (ev) => {
   if (!drag) return;
   const p = toWorld(ev);
-  const o = DATA[curRoom][drag.i];
+  const o = DATA[curRoom].items[drag.i];
   o.x = Math.round(Math.max(-40, Math.min(W - 20, p.x - drag.dx)));
   o.y = Math.round(Math.max(WALL_Y - 60, Math.min(FLOOR.y1, p.y - drag.dy)));
   draw(); render();
@@ -251,56 +382,46 @@ const stop = () => { if (drag) { drag = null; render(); } };
 cv.addEventListener("pointerup", stop);
 cv.addEventListener("pointercancel", stop);
 
+/* ---------- 按钮 ---------- */
 document.getElementById("del").addEventListener("click", () => {
-  if (sel < 0) return; DATA[curRoom].splice(sel, 1); sel = -1; draw(); render();
+  if (mode !== "furniture") { DATA[curRoom][baseTarget] = null; draw(); render(); drawAtlas(); return; }
+  if (sel < 0) return; DATA[curRoom].items.splice(sel, 1); sel = -1; draw(); render();
 });
 document.getElementById("narrow").addEventListener("click", () => {
-  if (sel < 0) return; const o = DATA[curRoom][sel];
+  if (sel < 0) return; const o = DATA[curRoom].items[sel];
   o.w = Math.max(16, Math.round(o.w / 1.12)); draw(); render();
 });
 document.getElementById("wide").addEventListener("click", () => {
-  if (sel < 0) return; const o = DATA[curRoom][sel];
+  if (sel < 0) return; const o = DATA[curRoom].items[sel];
   o.w = Math.min(400, Math.round(o.w * 1.12)); draw(); render();
 });
 document.getElementById("stretch").addEventListener("click", () => {
-  if (sel < 0) return; const o = DATA[curRoom][sel];
+  if (sel < 0) return; const o = DATA[curRoom].items[sel];
   o.stretch = !o.stretch; draw(); render();
 });
 document.getElementById("back").addEventListener("click", () => {
-  if (sel <= 0) return; const l = DATA[curRoom];
+  if (sel <= 0) return; const l = DATA[curRoom].items;
   l.unshift(l.splice(sel, 1)[0]); sel = 0; draw(); render();
 });
 document.getElementById("front").addEventListener("click", () => {
-  if (sel < 0 || sel === DATA[curRoom].length - 1) return;
-  const l = DATA[curRoom];
+  if (sel < 0 || sel === DATA[curRoom].items.length - 1) return;
+  const l = DATA[curRoom].items;
   l.push(l.splice(sel, 1)[0]); sel = l.length - 1; draw(); render();
 });
-const copyBtn = document.getElementById("copy");
-copyBtn.addEventListener("click", async () => {
-  try { await navigator.clipboard.writeText(out.value); copyBtn.textContent = "复制好了 ✓"; }
-  catch (e) { out.select(); copyBtn.textContent = "长按上面复制"; }
-  setTimeout(() => { copyBtn.textContent = "复制清单"; }, 1600);
-});
 
-function render() {
-  const l = DATA[curRoom];
-  if (!l.length) { out.value = ""; return; }
-  out.value = "// " + ROOM_BY_KEY[curRoom].label + "\n" + l.map(o =>
-    `{ c:"${o.c}", n:${o.n}, x:${o.x}, y:${o.y}, w:${o.w}, h:${o.h}` + (o.stretch ? ", stretch:true" : "") + " },"
-  ).join("\n");
+/* 模式切换 */
+const mFur = document.getElementById("mFur"), mBase = document.getElementById("mBase");
+const baseCtl = document.getElementById("baseCtl"), toolRow = document.getElementById("toolRow");
+function setMode(m) {
+  mode = m;
+  mFur.classList.toggle("on", m === "furniture");
+  mBase.classList.toggle("on", m === "base");
+  baseCtl.style.display = (m === "base") ? "inline-flex" : "none";
+  toolRow.style.display = (m === "base") ? "none" : "flex";
+  document.body.classList.toggle("base", m === "base");
+  document.getElementById("tip").textContent = (m === "base")
+    ? "选「贴墙」或「贴地」→ 左边大表点一格 → 立刻铺上。不满意就再点一格，或者按上面的「删掉选中」清空这一层。"
+    : "左边点一下 → 进屋子；拖屋里那件 → 挪位置；点中会亮黄边。";
+  if (m === "base") buildAtlas(); else { document.body.classList.remove... }
+  ...
 }
-
-const roomSel = document.getElementById("room");
-ROOMS.forEach(r => { const o = document.createElement("option"); o.value = r.key; o.textContent = r.label; roomSel.appendChild(o); });
-roomSel.addEventListener("change", () => { curRoom = roomSel.value; sel = -1; draw(); render(); });
-
-const themeSel = document.getElementById("theme");
-THEMES.forEach(t => { const o = document.createElement("option"); o.value = t.key; o.textContent = t.label; themeSel.appendChild(o); });
-themeSel.addEventListener("change", () => scan(themeSel.value));
-
-scan(THEMES[0].key);
-fit();
-render();
-</script>
-</body>
-</html>
