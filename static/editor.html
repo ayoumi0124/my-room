@@ -25,13 +25,14 @@
   .lib .cell:active{border-color:var(--hot)}
   .lib .cell img{image-rendering:pixelated;width:100%;height:38px;object-fit:contain;display:block;pointer-events:none}
   .lib .cell b{display:block;font-size:9px;color:var(--dim);font-weight:500;pointer-events:none}
-  body.base .lib{display:block;width:clamp(180px,40%,400px);padding:6px}
+  body.base .lib{display:block;width:clamp(180px,42%,460px);padding:6px}
   .lib .hint{font-size:11px;color:var(--dim);margin:0 0 6px}
   .lib .status{font-size:11px;color:var(--dim);margin:0 0 6px;word-break:break-all}
   .lib .status.warn{color:#ffb0a0}
-  .lib .swatch{display:flex;gap:6px;align-items:center;margin:0 0 8px;font-size:11px;color:var(--dim)}
+  .lib .swatch{display:flex;gap:6px;align-items:center;margin:0 0 6px;font-size:11px;color:var(--dim)}
   .lib .swatch canvas{image-rendering:pixelated;border:1px solid var(--line);border-radius:4px;background:#11101a}
-  .lib .atlasbox{overflow:auto;max-width:100%}
+  .lib .atlasbox{overflow:auto;max-width:100%;border:1px solid var(--line);border-radius:6px;background:#0e0d12}
+  .lib .atlasbox canvas{cursor:grab}
   .stage{flex:1;display:flex;align-items:center;justify-content:center;background:#0e0d12;overflow:hidden}
   canvas{display:block;touch-action:none;image-rendering:pixelated}
   footer{flex:none;border-top:1px solid var(--line);padding:6px 10px;display:flex;gap:6px;
@@ -53,9 +54,18 @@
     <button id="tWall" class="on">贴墙</button>
     <button id="tFloor">贴地</button>
     <select id="sheet"></select>
-    <button id="kFlat">一格格平铺</button>
-    <button id="kCol" class="on">整列往下铺</button>
+    <label style="color:var(--dim);font-size:12px">循环
+      <select id="loop">
+        <option value="1">1 行（一格一格）</option>
+        <option value="2">2 行</option>
+        <option value="3">3 行</option>
+        <option value="4">4 行</option>
+        <option value="6">6 行</option>
+        <option value="8">8 行</option>
+      </select>
+    </label>
     <button id="fit">凑整铺满</button>
+    <button id="zAll">看全</button>
     <button id="zS">小</button>
     <button id="zM">中</button>
     <button id="zL">大</button>
@@ -86,16 +96,21 @@
 "use strict";
 /* ============================================================
    摆家 · editor
-   ┌ 摆家具 —— 左边图库 → 点进右边屋子 → 拖位置 → 出来是 items
-   └ 铺墙地 —— 左边是一张 Room_Builder 大表，点一格 → 铺到当前房间 → 出来是 base
 
-   铺法（12 号下午加的）：
-     col  整列往下铺  —— 从点中那行开始，同一列一行行往下走，铺完再从头
-     flat 一格格平铺  —— 只用点中那一格，横竖都重复（地板用这个）
+   摆家具 —— 左边图库 → 点进右边屋子 → 拖位置 → 出来是 items
+   铺墙地 —— 左边是一张 Room_Builder 大表，点一格 → 铺到当前房间 → 出来是 base
 
-   凑整铺满（12 号下午加的）：
-     墙区高 150、一块 32 → 150÷32＝4.6875，除不尽，底下会剩半截。
-     点开「凑整铺满」就自己算成整数行（150→5 行，一格 30），四边都齐。
+   「循环几行」是这块的关键：
+     整套墙纸不是一张图，是「一行一行」拼出来的横带子。
+     只重复一行 → 那条横带会一直重复，接缝很生硬。
+     循环 2~8 行 → 从你点的那行开始，往下连着几行当一个循环，再重复。
+     到底该循环几行，看大表里那套图案竖着占几行 —— 你试出来就行。
+
+   「看全」＝ 把大表缩到整张宽度装得下，一眼看完全部 32 列。
+   大表也能拖着平移（按住拖，松手不选中）。
+
+   凑整铺满：墙区高 150、一格 32 → 150÷32＝4.6875，除不尽，边角会剩半截。
+     开着就自己算成整数行，四边齐。
 
    坐标跟 house.html 一致：x=左, y=顶, w=显示宽, h=到底边的框
    素材：Tiles by LimeZu —— https://limezu.itch.io/
@@ -171,8 +186,8 @@ let mode       = "furniture";
 let baseTarget = "wall";
 let sheetKey   = "walls";
 let atlasTile  = 20;
-let tileKind   = "col";     // flat | col
-let fitMode    = true;      // 凑整铺满，默认开
+let loopRows   = 1;        // 循环几行
+let fitMode    = true;     // 凑整铺满
 
 const cv  = document.getElementById("c");
 const ctx = cv.getContext("2d");
@@ -261,7 +276,7 @@ function boxOf(o) {
   return { x: o.x, y: o.y + o.h - h, w: o.w, h: h };
 }
 
-/* 铺一片区域。t = { s, c, r, m:"flat"|"col", fit:bool } */
+/* 铺一片区域。t = { s, c, r, loop, fit } */
 function tileArea(t, x0, y0, x1, y1) {
   if (!t) return false;
   const sh = SHEET_BY[t.s];
@@ -279,11 +294,12 @@ function tileArea(t, x0, y0, x1, y1) {
     th = hArea / rows;
   }
 
+  const lp = Math.max(1, t.loop || 1);
   const nCols = Math.ceil(wArea / tw);
   const nRows = Math.ceil(hArea / th);
 
   for (let j = 0; j < nRows; j++) {
-    const row = (t.m === "col") ? ((t.r + j) % sh.rows) : t.r;
+    const row = (t.r + (j % lp)) % sh.rows;
     const sy  = row * 32;
     const dy  = y0 + j * th;
     const dh  = Math.min(th, y1 - dy);
@@ -405,8 +421,8 @@ function updateSwatch() {
   if (!cur) { sp.textContent = "还没铺，下面点一格"; return; }
   const s = sheetOf(SHEET_BY[cur.s]);
   if (s.ok) g.drawImage(s.el, cur.c * 32, cur.r * 32, 32, 32, 0, 0, 32, 32);
-  sp.textContent = SHEET_BY[cur.s].label + " 第 " + cur.c + " 列 / 第 " + cur.r + " 行　" +
-                   (cur.m === "col" ? "整列" : "平铺") + (cur.fit ? "　凑整" : "");
+  sp.textContent = SHEET_BY[cur.s].label + " 第 " + cur.c + " 列 / 第 " + cur.r + " 行　循环 " +
+                   (cur.loop || 1) + " 行" + (cur.fit ? "　凑整" : "");
 }
 
 function buildAtlas() {
@@ -414,7 +430,8 @@ function buildAtlas() {
 
   const hint = document.createElement("div");
   hint.className = "hint";
-  hint.textContent = "点一格 → 铺到「" + ROOM_BY_KEY[curRoom].label + "」的" + (baseTarget === "wall" ? "墙" : "地板") + "上";
+  hint.textContent = "点一格 → 铺到「" + ROOM_BY_KEY[curRoom].label + "」的" + (baseTarget === "wall" ? "墙" : "地板") +
+                     "上　·　按住拖动可以平移大表";
   lib.appendChild(hint);
 
   const st = document.createElement("div");
@@ -442,14 +459,31 @@ function buildAtlas() {
   box.appendChild(ac);
   lib.appendChild(box);
 
-  ac.addEventListener("click", (ev) => {
+  /* 点 = 选；拖动 = 平移 */
+  let pan = null;
+  ac.addEventListener("pointerdown", (ev) => {
+    pan = { x: ev.clientX, y: ev.clientY, l: box.scrollLeft, t: box.scrollTop, moved: false };
+    try { ac.setPointerCapture(ev.pointerId); } catch (e) {}
+  });
+  ac.addEventListener("pointermove", (ev) => {
+    if (!pan) return;
+    const dx = ev.clientX - pan.x, dy = ev.clientY - pan.y;
+    if (Math.abs(dx) + Math.abs(dy) > 5) pan.moved = true;
+    box.scrollLeft = pan.l - dx;
+    box.scrollTop  = pan.t - dy;
+  });
+  ac.addEventListener("pointerup", (ev) => {
+    const moved = pan && pan.moved;
+    pan = null;
+    if (moved) return;
     const r = ac.getBoundingClientRect();
     const c  = Math.floor((ev.clientX - r.left) / atlasTile);
     const rr = Math.floor((ev.clientY - r.top ) / atlasTile);
     if (c < 0 || rr < 0 || c >= sh.cols || rr >= sh.rows) return;
-    DATA[curRoom][baseTarget] = { s: sheetKey, c: c, r: rr, m: tileKind, fit: fitMode };
+    DATA[curRoom][baseTarget] = { s: sheetKey, c: c, r: rr, loop: loopRows, fit: fitMode };
     draw(); render(); drawAtlas(); updateSwatch();
   });
+  ac.addEventListener("pointercancel", () => { pan = null; });
 
   drawAtlas();
   updateStatusLine();
@@ -481,12 +515,13 @@ function drawAtlas() {
 
   const cur = DATA[curRoom][baseTarget];
   if (cur && cur.s === sheetKey) {
+    const lp = Math.max(1, cur.loop || 1);
     g.strokeStyle = "#ffd696"; g.lineWidth = 2;
-    g.strokeRect(cur.c * atlasTile + 1, cur.r * atlasTile + 1, atlasTile - 2, atlasTile - 2);
+    g.strokeRect(cur.c * atlasTile + 1, cur.r * atlasTile + 1, atlasTile - 2, atlasTile * lp - 2);
   }
 }
 
-/* ---------- 拖拽 ---------- */
+/* ---------- 拖拽（摆家具） ---------- */
 let drag = null;
 cv.addEventListener("pointerdown", (ev) => {
   if (mode !== "furniture") return;
@@ -564,7 +599,7 @@ function setMode(m) {
   document.body.classList.toggle("base", isBase);
 
   if (isBase) {
-    tipEl.textContent = "墙用「整列往下铺」，地板用「一格格平铺」。「凑整铺满」开着，就不会在边角剩半截。";
+    tipEl.textContent = "「循环几行」是重点：整块墙纸竖着占几行，就循环几行。看全＝缩到一张全看得见；大表按住能拖。";
     sel = -1;
     buildAtlas();
   } else {
@@ -583,8 +618,6 @@ function setTarget(t) {
   baseTarget = t;
   tWall.classList.toggle("on", t === "wall");
   tFloor.classList.toggle("on", t === "floor");
-  tileKind = (t === "wall") ? "col" : "flat";
-  setKindButtons();
   sheetKey = (t === "wall") ? "walls" : "floors";
   sheetSel.value = sheetKey;
   buildAtlas();
@@ -592,15 +625,9 @@ function setTarget(t) {
 tWall.addEventListener("click", () => setTarget("wall"));
 tFloor.addEventListener("click", () => setTarget("floor"));
 
-/* 铺法 */
-const kFlat = document.getElementById("kFlat");
-const kCol  = document.getElementById("kCol");
-function setKindButtons() {
-  kFlat.classList.toggle("on", tileKind === "flat");
-  kCol.classList.toggle("on",  tileKind === "col");
-}
-kFlat.addEventListener("click", () => { tileKind = "flat"; setKindButtons(); });
-kCol.addEventListener("click",  () => { tileKind = "col";  setKindButtons(); });
+/* 循环几行 */
+const loopSel = document.getElementById("loop");
+loopSel.addEventListener("change", () => { loopRows = Number(loopSel.value) || 1; });
 
 /* 凑整铺满 */
 const fitBtn = document.getElementById("fit");
@@ -608,10 +635,7 @@ function setFitButtons() { fitBtn.classList.toggle("on", fitMode); }
 fitBtn.addEventListener("click", () => {
   fitMode = !fitMode;
   setFitButtons();
-  const cur = DATA[curRoom][baseTarget];
-  const other = DATA[curRoom][baseTarget === "wall" ? "floor" : "wall"];
-  if (cur)   { cur.fit = fitMode; }
-  if (other) { other.fit = fitMode; }
+  ["wall", "floor"].forEach(k => { const o = DATA[curRoom][k]; if (o) o.fit = fitMode; });
   draw(); render(); updateSwatch();
 });
 
@@ -624,8 +648,15 @@ SHEETS.forEach(s => {
 });
 sheetSel.addEventListener("change", () => { sheetKey = sheetSel.value; buildAtlas(); });
 
-/* 大表格子大小 */
+/* 大表缩放 */
 function setZoom(t) { atlasTile = t; buildAtlas(); }
+function fitAll() {
+  const sh = SHEET_BY[sheetKey];
+  const avail = Math.max(120, lib.clientWidth - 20);
+  atlasTile = Math.max(4, Math.floor(avail / sh.cols));
+  buildAtlas();
+}
+document.getElementById("zAll").addEventListener("click", fitAll);
 document.getElementById("zS").addEventListener("click", () => setZoom(12));
 document.getElementById("zM").addEventListener("click", () => setZoom(20));
 document.getElementById("zL").addEventListener("click", () => setZoom(30));
@@ -655,9 +686,9 @@ function render() {
   const L = ["// " + ROOM_BY_KEY[curRoom].label];
   const b = [];
   if (d.wall)  b.push('wall:{ s:"'  + d.wall.s  + '", c:' + d.wall.c  + ', r:' + d.wall.r  +
-                      ', m:"' + (d.wall.m  || "flat") + '"' + (d.wall.fit  ? ", fit:true" : "") + ' }');
+                      ', loop:' + (d.wall.loop  || 1) + (d.wall.fit  ? ", fit:true" : "") + ' }');
   if (d.floor) b.push('floor:{ s:"' + d.floor.s + '", c:' + d.floor.c + ', r:' + d.floor.r +
-                      ', m:"' + (d.floor.m || "flat") + '"' + (d.floor.fit ? ", fit:true" : "") + ' }');
+                      ', loop:' + (d.floor.loop || 1) + (d.floor.fit ? ", fit:true" : "") + ' }');
   if (b.length) L.push("base: { " + b.join(", ") + " },");
   if (d.items.length) {
     L.push("items: [");
@@ -691,7 +722,6 @@ THEMES.forEach(t => {
 themeSel.addEventListener("change", () => { if (mode === "furniture") scan(themeSel.value); });
 
 /* ---------- 起步 ---------- */
-setKindButtons();
 setFitButtons();
 scan(THEMES[0].key);
 fit();
