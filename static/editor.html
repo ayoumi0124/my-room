@@ -26,7 +26,7 @@
   .lib .cell:active{border-color:var(--hot)}
   .lib .cell img{image-rendering:pixelated;width:100%;height:38px;object-fit:contain;display:block;pointer-events:none}
   .lib .cell b{display:block;font-size:9px;color:var(--dim);font-weight:500;pointer-events:none}
-  body.base .lib{display:block;width:clamp(180px,42%,460px);padding:6px}
+  body.base .lib{display:block;width:clamp(180px,44%,500px);padding:6px}
   .lib .hint{font-size:11px;color:var(--dim);margin:0 0 6px}
   .lib .status{font-size:11px;color:var(--dim);margin:0 0 6px;word-break:break-all}
   .lib .status.warn{color:#ffb0a0}
@@ -59,7 +59,6 @@
       <select id="lc">
         <option value="1">1 列</option><option value="2">2 列</option><option value="3">3 列</option>
         <option value="4" selected>4 列</option><option value="6">6 列</option><option value="8">8 列</option>
-        <option value="16">16 列</option>
       </select>
     </label>
     <label class="f">竖着
@@ -73,6 +72,7 @@
     <button id="rowDn">行 ↓</button>
   </div>
   <div class="row" id="baseCtl2" style="display:none;margin-top:6px">
+    <button id="clean" class="on">去留白</button>
     <button id="fit">凑整铺满</button>
     <button id="zAll">看全</button>
     <button id="zS">小</button>
@@ -106,15 +106,19 @@
 /* ============================================================
    摆家 · editor
 
-   摆家具 —— 左边图库 → 点进右边屋子 → 拖位置 → 出来是 items
-   铺墙地 —— 左边是一张 Room_Builder 大表，点一格 → 铺到当前房间 → 出来是 base
+   ┌ 摆家具 —— 左边图库 → 点进右边屋子 → 拖位置 → 出来是 items
+   └ 铺墙地 —— 左边是一张 Room_Builder 大表，点一格 → 铺到当前房间 → 出来是 base
 
-   ★ 关键：整套墙纸不是一个格子，是「一块」——横着几列、竖着几行。
-     大表上：竖着每 4 行换一种花纹；横着每几列是一套的左右接续。
-     所以要点「横着几列 / 竖着几行」，填上那块的大小。
-     填对了，整面墙才接得上；填 1×1 就会一格一格地断开。
+   ★ 去留白（12 号下午宁宁发现的）
+     作者在素材表里塞了很多「纯黑」「纯白」的空格子，当分隔用的。
+     铺墙的时候这些格子会变成一条条黑线白线，很难看。
+     开着「去留白」，程序会先把整张表扫一遍，认出这些空格；
+     铺的时候碰到空格，就沿用上一格的内容 —— 不留洞，也不出黑线白线。
+     大表上空格子会画一道斜杠，一眼就知道哪些是要跳过的。
 
-   「行 ↑ / 行 ↓」：起点行上下挪一格。白条、接缝对不齐，就靠这个一格一格试。
+   ★ 一块墙纸有多大
+     墙纸不是一格一格，是「一块」——横着几列、竖着几行。
+     填上那块的大小，整面墙才接得上。对不齐就用「行 ↑ / 行 ↓」一格一格试。
 
    「看全」＝ 缩到整张宽度装得下；大表按住能拖。
    「凑整铺满」＝ 墙高 150、一格 32，除不尽，边角会剩半截；开着就自己算成整数行。
@@ -193,9 +197,10 @@ let mode       = "furniture";
 let baseTarget = "wall";
 let sheetKey   = "walls";
 let atlasTile  = 20;
-let loopCols   = 4;     // 横着几列
-let loopRows   = 4;     // 竖着几行
-let fitMode    = true;  // 凑整铺满
+let loopCols   = 4;
+let loopRows   = 4;
+let fitMode    = true;
+let cleanMode  = true;    // 去留白
 
 const cv  = document.getElementById("c");
 const ctx = cv.getContext("2d");
@@ -218,14 +223,58 @@ function getImg(u, cb) {
   return e;
 }
 
-/* ---------- 大表加载（不递归） ---------- */
+/* ---------- 大表加载 + 扫留白（不递归） ---------- */
 const SHEET = Object.create(null);
 let sheetStatus = "";
+
+/* 一格是不是「留白」：整格颜色几乎一样，而且要么很黑要么很白 */
+function analyze(s, sh) {
+  if (s.ana) return s.ana;
+  let empty = null;
+  try {
+    const t = document.createElement("canvas");
+    t.width  = sh.cols * 32;
+    t.height = sh.rows * 32;
+    const g = t.getContext("2d");
+    g.imageSmoothingEnabled = false;
+    g.drawImage(s.el, 0, 0, t.width, t.height);
+    const pix = g.getImageData(0, 0, t.width, t.height).data;
+    const W2 = t.width;
+    empty = new Uint8Array(sh.cols * sh.rows);
+    let n = 0;
+    for (let r = 0; r < sh.rows; r++) {
+      for (let c = 0; c < sh.cols; c++) {
+        let mn = 255, mx = 0;
+        for (let y = 0; y < 32; y++) {
+          let idx = ((r * 32 + y) * W2 + c * 32) * 4;
+          for (let x = 0; x < 32; x++, idx += 4) {
+            const v = Math.max(pix[idx], pix[idx + 1], pix[idx + 2]);
+            if (v < mn) mn = v;
+            if (v > mx) mx = v;
+          }
+        }
+        const isBlank = (mx - mn) < 12 && (mx < 44 || mn > 212);
+        if (isBlank) { empty[r * sh.cols + c] = 1; n++; }
+      }
+    }
+    s.blankCount = n;
+  } catch (e) {
+    empty = null;   // 读像素失败就当作没留白，不挡事
+  }
+  s.ana = { empty: empty };
+  return s.ana;
+}
+function isBlank(sh, s, c, r) {
+  const a = s.ana;
+  if (!a || !a.empty) return false;
+  if (c < 0 || r < 0 || c >= sh.cols || r >= sh.rows) return false;
+  return a.empty[r * sh.cols + c] === 1;
+}
 
 function sheetOf(sh) {
   let s = SHEET[sh.key];
   if (s) return s;
-  s = SHEET[sh.key] = { ok:false, el:new Image(), url:"", i:0 };
+  s = SHEET[sh.key] = { ok:false, el:new Image(), url:"", i:0, ana:null, blankCount:0 };
   (function tryNext() {
     if (s.i >= RB_LIST.length) {
       sheetStatus = "读不到大表（试过 " + RB_LIST.length + " 个路径）";
@@ -236,7 +285,10 @@ function sheetOf(sh) {
     s.url = u;
     s.el.onload  = () => {
       s.ok = true;
-      sheetStatus = "已读到 " + sh.file + "（" + s.el.naturalWidth + "×" + s.el.naturalHeight + "）";
+      const a = analyze(s, sh);
+      const nb = a.empty ? s.blankCount : 0;
+      sheetStatus = "已读到 " + sh.file + "（" + s.el.naturalWidth + "×" + s.el.naturalHeight + "）" +
+                    (a.empty ? "　留白 " + nb + " 格" : "　（留白没扫出来）");
       scheduleUi();
     };
     s.el.onerror = () => { s.i++; tryNext(); };
@@ -284,7 +336,7 @@ function boxOf(o) {
   return { x: o.x, y: o.y + o.h - h, w: o.w, h: h };
 }
 
-/* 铺一片区域。t = { s, c, r, lc, lr, fit } */
+/* 铺一片区域。t = { s, c, r, lc, lr, fit, clean } */
 function tileArea(t, x0, y0, x1, y1) {
   if (!t) return false;
   const sh = SHEET_BY[t.s];
@@ -304,21 +356,24 @@ function tileArea(t, x0, y0, x1, y1) {
 
   const lc = Math.max(1, t.lc || 1);
   const lr = Math.max(1, t.lr || 1);
+  const clean = !!t.clean;
 
   const nCols = Math.ceil(wArea / tw);
   const nRows = Math.ceil(hArea / th);
 
+  let lastC = t.c, lastR = t.r;   // 上一格用了什么，遇到留白就沿用它
   for (let j = 0; j < nRows; j++) {
-    const row = (t.r + (j % lr)) % sh.rows;
-    const sy  = row * 32;
-    const dy  = y0 + j * th;
-    const dh  = Math.min(th, y1 - dy);
     for (let i = 0; i < nCols; i++) {
-      const col = (t.c + (i % lc)) % sh.cols;
-      const sx  = col * 32;
-      const dx  = x0 + i * tw;
-      const dw  = Math.min(tw, x1 - dx);
-      ctx.drawImage(s.el, sx, sy, dw, dh, dx, dy, dw, dh);
+      let col = (t.c + (i % lc)) % sh.cols;
+      let row = (t.r + (j % lr)) % sh.rows;
+      if (clean && isBlank(sh, s, col, row)) { col = lastC; row = lastR; }
+      else { lastC = col; lastR = row; }
+
+      const dx = x0 + i * tw;
+      const dy = y0 + j * th;
+      const dw = Math.min(tw, x1 - dx);
+      const dh = Math.min(th, y1 - dy);
+      ctx.drawImage(s.el, col * 32, row * 32, dw, dh, dx, dy, dw, dh);
     }
   }
   return true;
@@ -433,7 +488,8 @@ function updateSwatch() {
   const s = sheetOf(SHEET_BY[cur.s]);
   if (s.ok) g.drawImage(s.el, cur.c * 32, cur.r * 32, 32, 32, 0, 0, 32, 32);
   sp.textContent = SHEET_BY[cur.s].label + " 第 " + cur.c + " 列 / 第 " + cur.r + " 行　一块 " +
-                   (cur.lc || 1) + "×" + (cur.lr || 1) + (cur.fit ? "　凑整" : "");
+                   (cur.lc || 1) + "×" + (cur.lr || 1) + (cur.fit ? "　凑整" : "") +
+                   (cur.clean ? "　去留白" : "");
 }
 
 function buildAtlas() {
@@ -490,7 +546,8 @@ function buildAtlas() {
     const c  = Math.floor((ev.clientX - r.left) / atlasTile);
     const rr = Math.floor((ev.clientY - r.top ) / atlasTile);
     if (c < 0 || rr < 0 || c >= sh.cols || rr >= sh.rows) return;
-    DATA[curRoom][baseTarget] = { s: sheetKey, c: c, r: rr, lc: loopCols, lr: loopRows, fit: fitMode };
+    DATA[curRoom][baseTarget] = { s: sheetKey, c: c, r: rr, lc: loopCols, lr: loopRows,
+                                  fit: fitMode, clean: cleanMode };
     draw(); render(); drawAtlas(); updateSwatch();
   });
   ac.addEventListener("pointercancel", () => { pan = null; });
@@ -519,21 +576,37 @@ function drawAtlas() {
     g.fillText("正在读大表 …", 8, 20);
   }
 
+  /* 空格子画一道斜杠，一眼看出哪些会被跳过 */
+  if (cleanMode && s.ana && s.ana.empty) {
+    g.save();
+    g.strokeStyle = "rgba(255,140,140,.55)";
+    g.lineWidth = 1;
+    for (let r = 0; r < sh.rows; r++) {
+      for (let c = 0; c < sh.cols; c++) {
+        if (!s.ana.empty[r * sh.cols + c]) continue;
+        const x = c * atlasTile, y = r * atlasTile, t = atlasTile;
+        g.beginPath(); g.moveTo(x + 2, y + 2); g.lineTo(x + t - 2, y + t - 2); g.stroke();
+        g.beginPath(); g.moveTo(x + t - 2, y + 2); g.lineTo(x + 2, y + t - 2); g.stroke();
+      }
+    }
+    g.restore();
+  }
+
   g.strokeStyle = "rgba(255,214,150,.20)"; g.lineWidth = 1;
   for (let c = 0; c <= sh.cols; c++) { g.beginPath(); g.moveTo(c * atlasTile + .5, 0); g.lineTo(c * atlasTile + .5, h); g.stroke(); }
   for (let r = 0; r <= sh.rows; r++) { g.beginPath(); g.moveTo(0, r * atlasTile + .5); g.lineTo(w, r * atlasTile + .5); g.stroke(); }
 
   const cur = DATA[curRoom][baseTarget];
   if (cur && cur.s === sheetKey) {
-    const lc = Math.max(1, cur.lc || 1);
-    const lr = Math.max(1, cur.lr || 1);
+    const lc2 = Math.max(1, cur.lc || 1);
+    const lr2 = Math.max(1, cur.lr || 1);
     g.save();
     g.strokeStyle = "#ffd696"; g.lineWidth = 2;
     g.strokeRect(cur.c * atlasTile + 1, cur.r * atlasTile + 1,
-                 atlasTile * lc - 2, atlasTile * lr - 2);
+                 atlasTile * lc2 - 2, atlasTile * lr2 - 2);
     g.strokeStyle = "rgba(255,214,150,.35)"; g.lineWidth = 1;
     g.strokeRect(cur.c * atlasTile + 3, cur.r * atlasTile + 3,
-                 atlasTile * lc - 6, atlasTile * lr - 6);
+                 atlasTile * lc2 - 6, atlasTile * lr2 - 6);
     g.restore();
   }
 }
@@ -618,7 +691,7 @@ function setMode(m) {
   document.body.classList.toggle("base", isBase);
 
   if (isBase) {
-    tipEl.textContent = "重点是「横着几列 / 竖着几行」：那块墙纸横竖各占几格，就填几格。填 1×1 会一格一格断开。对不齐就用「行 ↑ ↓」一格一格试。";
+    tipEl.textContent = "「去留白」开着，那些纯黑纯白的空格会被跳过（大表上画红叉的就是）。「横着/竖着」填一块墙纸的大小。";
     sel = -1;
     buildAtlas();
   } else {
@@ -666,6 +739,16 @@ function nudgeRow(d) {
 }
 document.getElementById("rowUp").addEventListener("click", () => nudgeRow(-1));
 document.getElementById("rowDn").addEventListener("click", () => nudgeRow(1));
+
+/* 去留白 */
+const cleanBtn = document.getElementById("clean");
+function setCleanBtn() { cleanBtn.classList.toggle("on", cleanMode); }
+cleanBtn.addEventListener("click", () => {
+  cleanMode = !cleanMode;
+  setCleanBtn();
+  ["wall", "floor"].forEach(k => { const o = DATA[curRoom][k]; if (o) o.clean = cleanMode; });
+  draw(); render(); drawAtlas(); updateSwatch();
+});
 
 /* 凑整铺满 */
 const fitBtn = document.getElementById("fit");
@@ -722,7 +805,7 @@ copyBtn.addEventListener("click", async () => {
 function part(o) {
   if (!o) return "";
   return o.s + '", c:' + o.c + ', r:' + o.r + ', lc:' + (o.lc || 1) + ', lr:' + (o.lr || 1) +
-         (o.fit ? ", fit:true" : "") ;
+         (o.fit ? ", fit:true" : "") + (o.clean ? ", clean:true" : "");
 }
 function render() {
   const d = DATA[curRoom];
@@ -764,6 +847,7 @@ themeSel.addEventListener("change", () => { if (mode === "furniture") scan(theme
 
 /* ---------- 起步 ---------- */
 setFitButtons();
+setCleanBtn();
 scan(THEMES[0].key);
 fit();
 render();
