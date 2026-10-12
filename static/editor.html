@@ -93,7 +93,7 @@
     <button id="clrBase">清掉贴图</button>
   </div>
   <div class="row" id="baseCtl3" style="display:none;margin-top:6px">
-    <span class="f" id="palLabel">底色（贴墙时＝墙面色，贴地时＝地板底色）</span>
+    <span class="f" id="palLabel">底色</span>
     <div class="pal" id="pal"></div>
     <button id="tintClr">回到默认</button>
   </div>
@@ -126,14 +126,14 @@
    ┌ 摆家具 —— 左边图库 → 点进右边屋子 → 拖位置 → 出来是 items
    └ 铺墙地 —— 左边是一张 Room_Builder 大表，点一格 → 铺到当前房间 → 出来是 base
 
-   ★ 底色（12 号下午宁宁要的）
-     不铺贴图的那一层，颜色可以自己挑。
-     贴墙时它管墙面色，贴地时它管地板底色 —— 都是「没有花纹的那一块」。
-     挑完会写进清单：wallTint / floorTint。
+   ★ 底色
+     没有贴图的那一层，颜色可以自己挑。
+     贴墙时它管墙面色，贴地时它管地板底色。
+     挑完写进清单：wallTint / floorTint。
 
    ★ 去留白
      作者在素材表里塞了不少纯黑、纯白的格子当分隔，还有些近白的横条。
-     铺的时候它们会变成黑线白线。「去留白」会先把整张表扫一遍认出它们，
+     铺的时候它们会变成黑线白线。「去留白」先整张扫一遍认出它们，
      碰到就沿用上一格 —— 不留洞，也不出黑白杠，大表上画红叉标出来。
      「力度」严 / 中 / 松 调它认得多狠；「横条也去」连整行整列一起算。
 
@@ -212,7 +212,6 @@ const ROOM_BY_KEY = Object.fromEntries(ROOMS.map(r => [r.key, r]));
 const DATA = {};
 ROOMS.forEach(r => { DATA[r.key] = { wall:null, floor:null, items:[], tint:{ wall:null, floor:null } }; });
 
-/* 挑颜色的板子 */
 const PALETTE = [
   "#efe1cd","#e7e1d3","#e9e2ea","#e9efd6","#f0e6d8","#cfe6c4",
   "#dce8f2","#f2dede","#f4e8c9","#e3ddd0","#d9e6df","#efe0ea",
@@ -258,8 +257,8 @@ const SHEET = Object.create(null);
 let sheetStatus = "";
 
 const LV = {
-  1: { dev: 14, dark: 48, light: 208 },
-  2: { dev: 26, dark: 78, light: 188 },
+  1: { dev: 14, dark: 48,  light: 208 },
+  2: { dev: 26, dark: 78,  light: 188 },
   3: { dev: 46, dark: 104, light: 166 }
 };
 
@@ -360,7 +359,7 @@ function scheduleUi() {
   if (uiTimer) return;
   uiTimer = setTimeout(() => {
     uiTimer = null;
-    draw(); drawAtlas(); updateStatusLine(); updateSwatch(); paintPal();
+    draw(); drawAtlas(); updateStatusLine(); updateSwatch();
   }, 0);
 }
 
@@ -552,13 +551,13 @@ function updateSwatch() {
   const sc = document.getElementById("atlasSwatch");
   const sp = document.getElementById("atlasSwatchText");
   if (!sc || !sp) return;
-  const cur = DATA[curRoom][baseTarget];
+  const cur  = DATA[curRoom][baseTarget];
   const tint = DATA[curRoom].tint[baseTarget];
   const g = sc.getContext("2d");
   g.clearRect(0, 0, 32, 32);
   if (!cur) {
     if (tint) { g.fillStyle = tint; g.fillRect(0, 0, 32, 32); sp.textContent = "没铺贴图，用底色 " + tint; }
-    else sp.textContent = "还没铺，下面点一格";
+    else { sp.textContent = "还没铺，下面点一格"; }
     return;
   }
   const s = sheetOf(SHEET_BY[cur.s]);
@@ -687,15 +686,19 @@ function drawAtlas() {
 /* ---------- 底色板子 ---------- */
 function paintPal() {
   const pal = document.getElementById("pal");
+  const lb  = document.getElementById("palLabel");
   if (!pal) return;
-  pal.innerHTML = "";
   const cur = DATA[curRoom].tint[baseTarget];
+  if (lb) {
+    lb.textContent = (baseTarget === "wall" ? "墙面色" : "地板底色") + (cur ? "：" + cur : "（没设，用默认）");
+  }
+  pal.innerHTML = "";
   PALETTE.forEach(hex => {
     const b = document.createElement("button");
     b.className = "sw" + (cur === hex ? " on" : "");
     b.style.background = hex;
     b.title = hex;
-    b.addEventListener("click", () => { setTint(hex); });
+    b.addEventListener("click", () => setTint(hex));
     pal.appendChild(b);
   });
   const pick = document.createElement("input");
@@ -704,9 +707,6 @@ function paintPal() {
   pick.title = "自己挑一个色";
   pick.addEventListener("input", () => setTint(pick.value));
   pal.appendChild(pick);
-  const lb = document.getElementById("palLabel");
-  if (lb) lb.textContent = (baseTarget === "wall" ? "墙面色" : "地板底色") +
-    （cur ? "：" + cur : "（没设，用默认）"）;
 }
 function setTint(hex) {
   DATA[curRoom].tint[baseTarget] = hex;
@@ -795,7 +795,7 @@ function setMode(m) {
   document.body.classList.toggle("base", isBase);
 
   if (isBase) {
-    tipEl.textContent = "红叉＝会被跳过的格子。「底色」那一排：贴墙时管墙面色，贴地时管地板底色。";
+    tipEl.textContent = "红叉＝会被跳过的格子。「底色」那排：贴墙时管墙面色，贴地时管地板底色。";
     sel = -1;
     paintPal();
     buildAtlas();
@@ -941,10 +941,10 @@ function render() {
   const d = DATA[curRoom];
   const L = ["// " + ROOM_BY_KEY[curRoom].label];
   const b = [];
-  if (d.wall)      b.push('wall:{ s:"'  + tilePart(d.wall)  + ' }');
-  if (d.floor)     b.push('floor:{ s:"' + tilePart(d.floor) + ' }');
-  if (d.tint.wall) b.push('wallTint:"'  + d.tint.wall  + '"');
-  if (d.tint.floor)b.push('floorTint:"' + d.tint.floor + '"');
+  if (d.wall)       b.push('wall:{ s:"'  + tilePart(d.wall)  + ' }');
+  if (d.floor)      b.push('floor:{ s:"' + tilePart(d.floor) + ' }');
+  if (d.tint.wall)  b.push('wallTint:"'  + d.tint.wall  + '"');
+  if (d.tint.floor) b.push('floorTint:"' + d.tint.floor + '"');
   if (b.length) L.push("base: { " + b.join(", ") + " },");
   if (d.items.length) {
     L.push("items: [");
