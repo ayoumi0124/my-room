@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#14131a">
-<title>我们家 · v4.1</title>
+<title>我们家 · v4.2</title>
 <style>
   html,body{margin:0;height:100%;background:#14131a;overflow:hidden;
     -webkit-user-select:none;user-select:none;touch-action:none;
@@ -18,17 +18,18 @@
 <script>
 "use strict";
 /* ============================================================
-   我们家 · v4.1
-   v3.x → v4.0 的经过：家具撤过、四个方向调过、颜色定成暖绿+暖棕。
+   我们家 · v4.2
+   v4.0 定颜色（暖绿墙 + 暖棕地）
+   v4.1 认 base.json：宁宁在 editor 里摆的东西照单搬进来
 
-   v4.1（2026-10-12 晚）：认 base.json。
-     宁宁在 editor.html 里摆的东西，导出的清单存进 static/base.json，
-     这一页就照它画：墙面色、地板底色、一块一块的区域、一件一件的家具。
-     · 区域 = 地上一块铺着别的砖的地方（比如客厅左下角那块厨房）
-       人走进那块地，底下会冒一行「按一下 · 做饭」
-     · 家具先全部「不挡路」—— v3.9 那次就是因为碰撞框太糙把宁宁卡住了。
-       等她在网页里走一圈、说哪件该挡，再一件一件打开。
+   v4.2（2026-10-12 晚）修两件宁宁发现的：
+     1. 人一进屋就站在家具堆里，被压住看不见。
+        → 进屋的落点从 y=520 挪到 y=260，落在地当中那片空地上，走进来再往里去。
+     2. 客厅右／中那扇「厨房」门还挂着。厨房已经变成客厅里的一块地了，
+        不该再有一条门通到另一个厨房。
+        → 每个屋子可以写 hideDoor，客厅写了 ["kitchen"]，门位自动重排。
 
+   家具默认不挡路（solid:false）。谁该挡，跟清泽说，一件一件开。
    数据源：GET /home、/messages、/base.json
    素材：Tiles by LimeZu — https://limezu.itch.io/
    ============================================================ */
@@ -39,6 +40,7 @@ const FLOOR = { x0: 12, x1: 348, y0: WALL_Y, y1: 570 };
 const BAR_Y = 570;
 const LIVING_ID = "living";
 const SPEED = 118;
+const SPAWN = { x: 180, y: 260 };   /* 进屋落点：地当中那片空地 */
 
 /* ---------- 贴图路径 ---------- */
 const BASE = {
@@ -57,7 +59,6 @@ const CATX = {
 };
 const src = (c, n) => { const t = CATX[c]; if (!t) return ""; return BASE[t.b] + t.d + t.p + n + ".png"; };
 
-/* 墙 / 地板那四张大表（作者把 Builder 拼成了 Bulder，两个都试） */
 const SHEET_DIRS = [
   "tiles/1_Interiors/32x32/Room_Bulder_subfiles_32x32/",
   "tiles/1_Interiors/32x32/Room_Builder_subfiles_32x32/"
@@ -122,7 +123,6 @@ function loadTile(u) {
 }
 function img(c, n) { return loadTile(src(c, n)); }
 
-/* 大表：一个一个试路径，试到能读为止 */
 const SHEETURL = Object.create(null);
 function sheetUrl(k) {
   if (SHEETURL[k] !== undefined) return SHEETURL[k];
@@ -146,29 +146,33 @@ const ctx = cv.getContext("2d");
 ctx.imageSmoothingEnabled = false;
 
 /* ============================================================
-   屋子定义
+   屋子
+   hideDoor：这间屋里不挂哪几扇门。厨房已经是客厅里的一块地，
+             客厅就不该再有一扇门通到「厨房」去。
    ============================================================ */
 const ROOMS = {
   living:  { name:"客厅", wall:["#e3e7cf","#d5dbc0"], floor:["#e0c9a6","#d2b78e"], line:"rgba(150,112,70,.22)", plank:true,
-             qz:{ x:170, y:330 }, cat:{ x:92, y:470 } },
+             qz:{ x:170, y:330 }, cat:{ x:92, y:470 }, hideDoor:["kitchen"] },
   study:   { name:"书房", wall:["#e2e6d4","#d4dac5"], floor:["#dfc8a3","#d0b489"], line:"rgba(150,112,70,.22)", plank:true,
-             qz:{ x:258, y:350 }, cat:{ x:300, y:470 } },
+             qz:{ x:258, y:350 }, cat:{ x:300, y:470 }, hideDoor:[] },
   kitchen: { name:"厨房", wall:["#e8ecd6","#dbe0c7"], floor:["#e6d6bc","#d8c5a6"], line:"rgba(150,112,70,.20)", plank:true,
-             qz:{ x:96, y:340 }, cat:{ x:300, y:468 } },
+             qz:{ x:96, y:340 }, cat:{ x:300, y:468 }, hideDoor:[] },
   garden:  { name:"花园", wall:["#d8e6c6","#c6d9b0"], floor:["#a8c98a","#8fb772"], line:"rgba(70,110,50,.20)", plank:false,
-             qz:{ x:180, y:330 }, cat:{ x:108, y:456 } }
+             qz:{ x:180, y:330 }, cat:{ x:108, y:456 }, hideDoor:[] }
 };
 const ROOM_ORDER = ["living", "study", "kitchen", "garden"];
 ROOM_ORDER.forEach(id => { ROOMS[id].bg = null; });
 
-/* 区域名字 → 点进去干什么 */
 const REGION_ACTION = { "厨房":"做饭", "猫窝":"看小橘", "书房":"看书", "卧室":"休息", "餐桌":"吃饭" };
 function actionOf(name) { return REGION_ACTION[name] || "进去看看"; }
 
+/* 门：一间屋挂几扇，按数量均匀排开 */
 const DOOR_W = 60, DOOR_H = 92, DOOR_Y = WALL_Y - DOOR_H;
+const DOOR_XS = { 1:[150], 2:[80,240], 3:[22,150,278], 4:[12,116,220,324] };
 function doorsOf(roomId) {
-  const others = ROOM_ORDER.filter(id => id !== roomId);
-  const xs = [22, 150, 278];
+  const hid = ROOMS[roomId].hideDoor || [];
+  const others = ROOM_ORDER.filter(id => id !== roomId && hid.indexOf(id) < 0);
+  const xs = DOOR_XS[others.length] || DOOR_XS[3];
   return others.map((id, i) => ({ id, x: xs[i], cx: xs[i] + DOOR_W / 2, y: DOOR_Y, w: DOOR_W, h: DOOR_H }));
 }
 
@@ -199,14 +203,13 @@ function floorColors(id) {
 function regionsOf(id) { const b = bgOf(id); return (b && Array.isArray(b.regions)) ? b.regions : []; }
 function furnOf(id)    { const b = bgOf(id); return (b && Array.isArray(b.items))   ? b.items   : []; }
 
-/* 家具先全都不挡路 —— 等宁宁走一圈说哪件该挡，再一件件开 */
 function solidsOf(id) {
   return furnOf(id)
     .filter(o => o.solid === true)
     .map(o => ({ x:o.x + 4, y:o.y + o.h * 0.45, w:o.w - 8, h:o.h * 0.55 }));
 }
 
-const ning = { x: 180, y: 520, dir: "front", step: 0 };
+const ning = { x: SPAWN.x, y: SPAWN.y, dir: "front", step: 0 };
 const qz   = { x: 170, y: 330, dir: "front" };
 const cat  = { x: 92,  y: 470, face: 1 };
 let cur = LIVING_ID;
@@ -264,7 +267,6 @@ function applyBase(j) {
       regions:   Array.isArray(r.regions) ? r.regions : [],
       items:     Array.isArray(r.items)   ? r.items   : []
     };
-    /* 先把贴图都预载一遍 */
     (ROOMS[id].bg.regions || []).forEach(g => { if (g.floor) sheetUrl(g.floor.s); });
     (ROOMS[id].bg.items || []).forEach(o => img(o.c, o.n));
   });
@@ -319,7 +321,7 @@ let fade = 0, pending = null;
 function gotoRoom(id) { if (id !== cur && !pending) pending = id; }
 function doSwitch(id) {
   cur = id;
-  ning.x = 180; ning.y = 516; ning.step = 0; ning.dir = "front";
+  ning.x = SPAWN.x; ning.y = SPAWN.y; ning.step = 0; ning.dir = "front";
   qz.x = ROOMS[id].qz.x;   qz.y = ROOMS[id].qz.y; qz.dir = "front";
   cat.x = ROOMS[id].cat.x; cat.y = ROOMS[id].cat.y;
   target = null;
@@ -370,7 +372,6 @@ function doorNear() {
   for (const d of doorsOf(cur)) if (ning.y < WALL_Y + 62 && Math.abs(ning.x - d.cx) < 42) return d;
   return null;
 }
-/* 宁宁脚下踩在哪块区域里 */
 function regionUnderFeet() {
   const regs = regionsOf(cur);
   for (let i = regs.length - 1; i >= 0; i--) {
@@ -474,7 +475,6 @@ function shadow(x, y, rx, ry) {
   ctx.restore();
 }
 
-/* ---------- 家具 ---------- */
 function drawTile(o) {
   const e = img(o.c, o.n);
   if (!e.ok) return false;
@@ -488,52 +488,11 @@ function drawTile(o) {
   return true;
 }
 
-/* ---------- 大表贴图：铺一片矩形 ---------- */
-function tileRect(t, x0, y0, x1, y1) {
-  if (!t) return false;
-  const def = SHEET_DEF[t.s];
-  if (!def) return false;
-  const u = sheetUrl(t.s);
-  if (!u) return false;
-  const e = loadTile(u);
-  if (!e.ok) return false;
-
-  const wArea = x1 - x0, hArea = y1 - y0;
-  let tw = 32, th = 32;
-  if (t.fit) {
-    const cols = Math.max(1, Math.round(wArea / 32));
-    const rows = Math.max(1, Math.round(hArea / 32));
-    tw = wArea / cols;
-    th = hArea / rows;
-  }
-  const lc = Math.max(1, t.lc || 1);
-  const lr = Math.max(1, t.lr || 1);
-  const nCols = Math.ceil(wArea / tw);
-  const nRows = Math.ceil(hArea / th);
-
-  let lastC = t.c, lastR = t.r;
-  for (let j = 0; j < nRows; j++) {
-    for (let i = 0; i < nCols; i++) {
-      let col = (t.c + (i % lc)) % def.cols;
-      let row = (t.r + (j % lr)) % def.rows;
-      if (t.clean && blankCell(t.s, col, row)) { col = lastC; row = lastR; }
-      else { lastC = col; lastR = row; }
-
-      const dx = x0 + i * tw, dy = y0 + j * th;
-      const dw = Math.min(tw, x1 - dx), dh = Math.min(th, y1 - dy);
-      ctx.drawImage(e.el, col * 32, row * 32, dw, dh, dx, dy, dw, dh);
-    }
-  }
-  return true;
-}
-
-/* 留白：素材表里纯黑纯白的格子。跟 editor 那边一套规则。
-   读到像素就算一次，算完记住。 */
 const BLANK = Object.create(null);
 function blankCell(key, c, r) {
   const table = BLANK[key];
   if (!table) return false;
-  return table[r * (SHEET_DEF[key].cols) + c] === 1;
+  return table[r * SHEET_DEF[key].cols + c] === 1;
 }
 function scanBlank(key) {
   if (BLANK[key] !== undefined) return;
@@ -570,12 +529,48 @@ function scanBlank(key) {
         }
       }
       BLANK[key] = out;
-    } catch (e) {
-      BLANK[key] = new Uint8Array(def.cols * def.rows);
-    }
+    } catch (e) { BLANK[key] = new Uint8Array(def.cols * def.rows); }
   };
   im.onerror = () => { BLANK[key] = new Uint8Array(def.cols * def.rows); };
   im.src = u;
+}
+
+function tileRect(t, x0, y0, x1, y1) {
+  if (!t) return false;
+  const def = SHEET_DEF[t.s];
+  if (!def) return false;
+  const u = sheetUrl(t.s);
+  if (!u) return false;
+  const e = loadTile(u);
+  if (!e.ok) return false;
+
+  const wArea = x1 - x0, hArea = y1 - y0;
+  let tw = 32, th = 32;
+  if (t.fit) {
+    const cols = Math.max(1, Math.round(wArea / 32));
+    const rows = Math.max(1, Math.round(hArea / 32));
+    tw = wArea / cols;
+    th = hArea / rows;
+  }
+  const lc = Math.max(1, t.lc || 1);
+  const lr = Math.max(1, t.lr || 1);
+  const nCols = Math.ceil(wArea / tw);
+  const nRows = Math.ceil(hArea / th);
+
+  let lastC = t.c, lastR = t.r;
+  for (let j = 0; j < nRows; j++) {
+    for (let i = 0; i < nCols; i++) {
+      let col = (t.c + (i % lc)) % def.cols;
+      let row = (t.r + (j % lr)) % def.rows;
+      if (t.clean && blankCell(t.s, col, row)) { col = lastC; row = lastR; }
+      else { lastC = col; lastR = row; }
+
+      const dx = x0 + i * tw, dy = y0 + j * th;
+      const dw = Math.min(tw, x1 - dx), dh = Math.min(th, y1 - dy);
+      ctx.drawImage(e.el, col * 32, row * 32, dw, dh, dx, dy, dw, dh);
+    }
+  }
+  return true;
 }
 
 /* ---------- 人物 ---------- */
@@ -650,16 +645,15 @@ function drawBubble(cx, cy, text) {
   rows.forEach((r, i) => ctx.fillText(r, bx + w / 2, by + 12 + i * lh + (lh - 4) / 2));
   ctx.restore();
 }
-function pill(x, y, w, h, bg, fg, text, font) {
+function pill(x, y, w, h, bg, fg, text) {
   ctx.save();
-  ctx.font = font || "600 12px -apple-system,PingFang SC,sans-serif";
+  ctx.font = "600 12px -apple-system,PingFang SC,sans-serif";
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillStyle = bg; rr(x, y, w, h, h / 2); ctx.fill();
   ctx.fillStyle = fg; ctx.fillText(text, x + w / 2, y + h / 2 + .5);
   ctx.restore();
 }
 
-/* ---------- 墙 ---------- */
 function drawWall() {
   const wc = wallColors(cur);
   const g = ctx.createLinearGradient(0, 0, 0, WALL_Y);
@@ -684,7 +678,6 @@ function drawWall() {
   ctx.fillRect(0, WALL_Y - 6, W, 6);
 }
 
-/* ---------- 地 ---------- */
 function drawFloor() {
   const fc = floorColors(cur);
   const R  = ROOMS[cur];
@@ -719,7 +712,6 @@ function drawFloor() {
   ctx.restore();
 }
 
-/* ---------- 区域：铺在地上的那一小块 ---------- */
 function drawRegions() {
   const regs = regionsOf(cur);
   for (let i = regs.length - 1; i >= 0; i--) {
@@ -812,23 +804,25 @@ function frame(now) {
   const bob = ning.step > 0 ? Math.sin(ning.step * 2) * 1.6 : 0;
 
   const actors = [];
-  for (const o of furnOf(cur)) {
-    actors.push({ y: o.y + o.h, f: () => drawTile(o) });
+  const items = furnOf(cur);
+  for (let i = 0; i < items.length; i++) {
+    const o = items[i];
+    /* 谁的下沿靠下谁画得晚（就压在上面）。下沿一样时，按清单里的先后。 */
+    actors.push({ y: o.y + o.h, i: i, f: () => drawTile(o) });
   }
-  if (HOME.catRoomId === cur) actors.push({ y: cat.y, f: () => drawCat(cat.x, cat.y) });
-  if (HOME.roomId === cur)    actors.push({ y: qz.y,  f: () => {
+  if (HOME.catRoomId === cur) actors.push({ y: cat.y, i: 0, f: () => drawCat(cat.x, cat.y) });
+  if (HOME.roomId === cur)    actors.push({ y: qz.y,  i: 0, f: () => {
       shadow(qz.x, qz.y, 13, 4);
       drawPerson(QZ, QZ.outfit, qz.dir, qz.x, qz.y, 0);
       tag(qz.x, qz.y - 100, "清泽", false);
   }});
-  actors.push({ y: ning.y, f: () => {
+  actors.push({ y: ning.y, i: 0, f: () => {
       shadow(ning.x, ning.y, 12, 4);
       drawPerson(NING, ningOutfit(), ning.dir, ning.x, ning.y, bob);
       tag(ning.x, ning.y - 100, "宁宁", true);
   }});
-  actors.sort((a, b) => a.y - b.y).forEach(a => a.f());
+  actors.sort((a, b) => (a.y - b.y) || (a.i - b.i)).forEach(a => a.f());
 
-  /* 脚底下那块区域 → 底下冒一行 */
   regionPrompt = null;
   const g = regionUnderFeet();
   if (g && !pending) {
@@ -836,8 +830,8 @@ function frame(now) {
     ctx.save();
     ctx.font = "600 12px -apple-system,PingFang SC,sans-serif";
     const tw = ctx.measureText(label).width + 22;
-    const px = Math.round(W / 2 - tw / 2), py = BAR_Y - 46, ph = 26;
     ctx.restore();
+    const px = Math.round(W / 2 - tw / 2), py = BAR_Y - 46, ph = 26;
     pill(px, py, tw, ph, "rgba(255,214,150,.94)", "#3a2a16", label);
     regionPrompt = { x: px, y: py, w: tw, h: ph, region: g };
   }
