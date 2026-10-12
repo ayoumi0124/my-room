@@ -18,6 +18,10 @@
   button.hot{background:#3a4a63;border-color:#4a5f80}
   button.on{background:#4a3f2a;border-color:var(--hot)}
   label.f{color:var(--dim);font-size:12px;display:inline-flex;gap:4px;align-items:center}
+  .pal{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+  .pal button.sw{width:24px;height:24px;padding:0;border-radius:6px;border:1px solid var(--line)}
+  .pal button.sw.on{outline:2px solid var(--hot);outline-offset:0}
+  .pal input[type=color]{width:30px;height:24px;padding:0;border:1px solid var(--line);border-radius:6px;background:var(--card)}
   .wrap{flex:1;display:flex;min-height:0}
   .lib{width:118px;flex:none;overflow-y:auto;border-right:1px solid var(--line);
     padding:6px;display:grid;grid-template-columns:1fr 1fr;gap:5px;align-content:start}
@@ -80,13 +84,18 @@
         <option value="3">松</option>
       </select>
     </label>
-    <button id="rowHdr" >横条也去</button>
+    <button id="rowHdr">横条也去</button>
     <button id="fit">凑整铺满</button>
     <button id="zAll">看全</button>
     <button id="zS">小</button>
     <button id="zM">中</button>
     <button id="zL">大</button>
-    <button id="clrBase">清掉这一层</button>
+    <button id="clrBase">清掉贴图</button>
+  </div>
+  <div class="row" id="baseCtl3" style="display:none;margin-top:6px">
+    <span class="f" id="palLabel">底色（贴墙时＝墙面色，贴地时＝地板底色）</span>
+    <div class="pal" id="pal"></div>
+    <button id="tintClr">回到默认</button>
   </div>
   <div class="row" id="toolRow" style="margin-top:6px">
     <button id="del">删掉选中</button>
@@ -117,17 +126,20 @@
    ┌ 摆家具 —— 左边图库 → 点进右边屋子 → 拖位置 → 出来是 items
    └ 铺墙地 —— 左边是一张 Room_Builder 大表，点一格 → 铺到当前房间 → 出来是 base
 
-   ★ 去留白（12 号下午宁宁发现、清泽做的）
-     作者在素材表里塞了不少纯黑、纯白的格子当分隔，还有些近白的横条。
-     铺墙的时候它们会变成黑线白线，很难看。
-     开着「去留白」，程序先把整张表扫一遍，认出这些格子；
-     铺的时候碰到就沿用上一格的内容 —— 不留洞，也不出黑白杠。
-     大表上被认出来的格子会画红叉，一眼看得见。
-     「力度」严 / 中 / 松 用来调它认得多狠；红叉太多或太少就换一档。
+   ★ 底色（12 号下午宁宁要的）
+     不铺贴图的那一层，颜色可以自己挑。
+     贴墙时它管墙面色，贴地时它管地板底色 —— 都是「没有花纹的那一块」。
+     挑完会写进清单：wallTint / floorTint。
 
-   ★ 一块墙纸有多大
+   ★ 去留白
+     作者在素材表里塞了不少纯黑、纯白的格子当分隔，还有些近白的横条。
+     铺的时候它们会变成黑线白线。「去留白」会先把整张表扫一遍认出它们，
+     碰到就沿用上一格 —— 不留洞，也不出黑白杠，大表上画红叉标出来。
+     「力度」严 / 中 / 松 调它认得多狠；「横条也去」连整行整列一起算。
+
+   ★ 一块贴图有多大
      墙纸不是一格一格，是「一块」——横着几列、竖着几行。
-     填上那块的大小，整面墙才接得上。对不齐就用「行 ↑ / 行 ↓」一格一格试。
+     地板相反：一格就是一块砖，1×1 才对。
 
    「看全」＝ 缩到整张宽度装得下；大表按住能拖。
    「凑整铺满」＝ 墙高 150、一格 32，除不尽，边角会剩半截；开着就自己算成整数行。
@@ -198,7 +210,14 @@ const ROOMS = [
 const ROOM_BY_KEY = Object.fromEntries(ROOMS.map(r => [r.key, r]));
 
 const DATA = {};
-ROOMS.forEach(r => { DATA[r.key] = { wall:null, floor:null, items:[] }; });
+ROOMS.forEach(r => { DATA[r.key] = { wall:null, floor:null, items:[], tint:{ wall:null, floor:null } }; });
+
+/* 挑颜色的板子 */
+const PALETTE = [
+  "#efe1cd","#e7e1d3","#e9e2ea","#e9efd6","#f0e6d8","#cfe6c4",
+  "#dce8f2","#f2dede","#f4e8c9","#e3ddd0","#d9e6df","#efe0ea",
+  "#cfc6b8","#b9b0a2","#8a8177","#f7f4ee"
+];
 
 let curRoom    = "living";
 let sel        = -1;
@@ -209,9 +228,9 @@ let atlasTile  = 20;
 let loopCols   = 4;
 let loopRows   = 4;
 let fitMode    = true;
-let cleanMode  = true;    // 去留白
-let blankLevel = 2;       // 1 严 / 2 中 / 3 松
-let rowHdrMode = false;   // 整行也算留白
+let cleanMode  = true;
+let blankLevel = 2;
+let rowHdrMode = false;
 
 const cv  = document.getElementById("c");
 const ctx = cv.getContext("2d");
@@ -234,13 +253,10 @@ function getImg(u, cb) {
   return e;
 }
 
-/* ---------- 大表加载 + 扫留白（不递归） ---------- */
+/* ---------- 大表加载 + 扫留白 ---------- */
 const SHEET = Object.create(null);
 let sheetStatus = "";
 
-/* 一格是不是「留白」：
-   先取 2%~98% 分位（丢掉零星几个杂点），
-   再要求：这一段范围够窄（整格几乎一个色），而且要么很暗要么很亮。 */
 const LV = {
   1: { dev: 14, dark: 48, light: 208 },
   2: { dev: 26, dark: 78, light: 188 },
@@ -275,7 +291,7 @@ function analyze(s, sh) {
             hist[Math.max(pix[idx], pix[idx + 1], pix[idx + 2])]++;
           }
         }
-        const total = 1024, cut = Math.floor(total * 0.02);
+        const cut = 20;
         let acc = 0, p2 = 0, p98 = 255;
         for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= cut) { p2 = v; break; } }
         acc = 0;
@@ -286,7 +302,6 @@ function analyze(s, sh) {
       }
     }
 
-    /* 整行 / 整列基本全空 → 连那些带一点浅纹的横条也一起算掉 */
     if (rowHdrMode) {
       rowBlank = new Uint8Array(sh.rows);
       colBlank = new Uint8Array(sh.cols);
@@ -301,11 +316,8 @@ function analyze(s, sh) {
         if (cnt >= sh.rows * 0.5) colBlank[c] = 1;
       }
     }
-
     s.blankCount = n;
-  } catch (e) {
-    empty = null;
-  }
+  } catch (e) { empty = null; }
   s.ana = { empty: empty, rowBlank: rowBlank, colBlank: colBlank };
   s.anaKey = key;
   return s.ana;
@@ -332,8 +344,7 @@ function sheetOf(sh) {
     const u = RB_LIST[s.i] + sh.file;
     s.url = u;
     s.el.onload  = () => {
-      s.ok = true;
-      s.ana = null; s.anaKey = "";
+      s.ok = true; s.ana = null; s.anaKey = "";
       analyze(s, sh);
       sheetStatus = "已读到 " + sh.file + "（" + s.el.naturalWidth + "×" + s.el.naturalHeight + "）";
       scheduleUi();
@@ -349,7 +360,7 @@ function scheduleUi() {
   if (uiTimer) return;
   uiTimer = setTimeout(() => {
     uiTimer = null;
-    draw(); drawAtlas(); updateStatusLine(); updateSwatch();
+    draw(); drawAtlas(); updateStatusLine(); updateSwatch(); paintPal();
   }, 0);
 }
 
@@ -383,7 +394,6 @@ function boxOf(o) {
   return { x: o.x, y: o.y + o.h - h, w: o.w, h: h };
 }
 
-/* 铺一片区域。t = { s, c, r, lc, lr, fit, clean } */
 function tileArea(t, x0, y0, x1, y1) {
   if (!t) return false;
   const sh = SHEET_BY[t.s];
@@ -392,7 +402,6 @@ function tileArea(t, x0, y0, x1, y1) {
   if (!s.ok) return false;
 
   const wArea = x1 - x0, hArea = y1 - y0;
-
   let tw = TILE, th = TILE;
   if (t.fit) {
     const cols = Math.max(1, Math.round(wArea / TILE));
@@ -404,7 +413,7 @@ function tileArea(t, x0, y0, x1, y1) {
   const lc = Math.max(1, t.lc || 1);
   const lr = Math.max(1, t.lr || 1);
   const clean = !!t.clean;
-  if (clean) analyze(s, sh);      // 先把这一档扫出来
+  if (clean) analyze(s, sh);
 
   const nCols = Math.ceil(wArea / tw);
   const nRows = Math.ceil(hArea / th);
@@ -432,17 +441,25 @@ function drawRoomBg() {
   const d = DATA[curRoom];
 
   if (!tileArea(d.wall, 0, 0, W, WALL_Y)) {
-    const wg = ctx.createLinearGradient(0, 0, 0, WALL_Y);
-    wg.addColorStop(0, R.wall[0]); wg.addColorStop(1, R.wall[1]);
-    ctx.fillStyle = wg; ctx.fillRect(0, 0, W, WALL_Y);
+    if (d.tint.wall) {
+      ctx.fillStyle = d.tint.wall; ctx.fillRect(0, 0, W, WALL_Y);
+    } else {
+      const wg = ctx.createLinearGradient(0, 0, 0, WALL_Y);
+      wg.addColorStop(0, R.wall[0]); wg.addColorStop(1, R.wall[1]);
+      ctx.fillStyle = wg; ctx.fillRect(0, 0, W, WALL_Y);
+    }
   }
   ctx.fillStyle = "rgba(0,0,0,.10)";
   ctx.fillRect(0, WALL_Y - 8, W, 8);
 
   if (!tileArea(d.floor, 0, WALL_Y, W, FLOOR.y1)) {
-    const fg = ctx.createLinearGradient(0, WALL_Y, 0, FLOOR.y1);
-    fg.addColorStop(0, R.floor[0]); fg.addColorStop(1, R.floor[1]);
-    ctx.fillStyle = fg; ctx.fillRect(0, WALL_Y, W, FLOOR.y1 - WALL_Y);
+    if (d.tint.floor) {
+      ctx.fillStyle = d.tint.floor; ctx.fillRect(0, WALL_Y, W, FLOOR.y1 - WALL_Y);
+    } else {
+      const fg = ctx.createLinearGradient(0, WALL_Y, 0, FLOOR.y1);
+      fg.addColorStop(0, R.floor[0]); fg.addColorStop(1, R.floor[1]);
+      ctx.fillStyle = fg; ctx.fillRect(0, WALL_Y, W, FLOOR.y1 - WALL_Y);
+    }
     ctx.strokeStyle = R.line; ctx.lineWidth = 1;
     for (let y = WALL_Y + 26; y < FLOOR.y1; y += 26) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
     for (let i = 0; i < 9; i++) { const x = 24 + i * 44; ctx.beginPath(); ctx.moveTo(x, WALL_Y); ctx.lineTo(x, FLOOR.y1); ctx.stroke(); }
@@ -536,9 +553,14 @@ function updateSwatch() {
   const sp = document.getElementById("atlasSwatchText");
   if (!sc || !sp) return;
   const cur = DATA[curRoom][baseTarget];
+  const tint = DATA[curRoom].tint[baseTarget];
   const g = sc.getContext("2d");
   g.clearRect(0, 0, 32, 32);
-  if (!cur) { sp.textContent = "还没铺，下面点一格"; return; }
+  if (!cur) {
+    if (tint) { g.fillStyle = tint; g.fillRect(0, 0, 32, 32); sp.textContent = "没铺贴图，用底色 " + tint; }
+    else sp.textContent = "还没铺，下面点一格";
+    return;
+  }
   const s = sheetOf(SHEET_BY[cur.s]);
   if (s.ok) g.drawImage(s.el, cur.c * 32, cur.r * 32, 32, 32, 0, 0, 32, 32);
   sp.textContent = SHEET_BY[cur.s].label + " 第 " + cur.c + " 列 / 第 " + cur.r + " 行　一块 " +
@@ -622,11 +644,9 @@ function drawAtlas() {
   g.fillStyle = "#1a1922"; g.fillRect(0, 0, w, h);
 
   const s = sheetOf(sh);
-  if (s.ok) {
-    g.drawImage(s.el, 0, 0, w, h);
-  } else {
-    g.fillStyle = "#8c8494";
-    g.font = "12px sans-serif";
+  if (s.ok) g.drawImage(s.el, 0, 0, w, h);
+  else {
+    g.fillStyle = "#8c8494"; g.font = "12px sans-serif";
     g.fillText("正在读大表 …", 8, 20);
   }
 
@@ -634,8 +654,7 @@ function drawAtlas() {
     const a = analyze(s, sh);
     if (a && a.empty) {
       g.save();
-      g.strokeStyle = "rgba(255,140,140,.6)";
-      g.lineWidth = 1;
+      g.strokeStyle = "rgba(255,140,140,.6)"; g.lineWidth = 1;
       for (let r = 0; r < sh.rows; r++) {
         for (let c = 0; c < sh.cols; c++) {
           if (!isBlank(sh, s, c, r)) continue;
@@ -658,13 +677,40 @@ function drawAtlas() {
     const lr2 = Math.max(1, cur.lr || 1);
     g.save();
     g.strokeStyle = "#ffd696"; g.lineWidth = 2;
-    g.strokeRect(cur.c * atlasTile + 1, cur.r * atlasTile + 1,
-                 atlasTile * lc2 - 2, atlasTile * lr2 - 2);
+    g.strokeRect(cur.c * atlasTile + 1, cur.r * atlasTile + 1, atlasTile * lc2 - 2, atlasTile * lr2 - 2);
     g.strokeStyle = "rgba(255,214,150,.35)"; g.lineWidth = 1;
-    g.strokeRect(cur.c * atlasTile + 3, cur.r * atlasTile + 3,
-                 atlasTile * lc2 - 6, atlasTile * lr2 - 6);
+    g.strokeRect(cur.c * atlasTile + 3, cur.r * atlasTile + 3, atlasTile * lc2 - 6, atlasTile * lr2 - 6);
     g.restore();
   }
+}
+
+/* ---------- 底色板子 ---------- */
+function paintPal() {
+  const pal = document.getElementById("pal");
+  if (!pal) return;
+  pal.innerHTML = "";
+  const cur = DATA[curRoom].tint[baseTarget];
+  PALETTE.forEach(hex => {
+    const b = document.createElement("button");
+    b.className = "sw" + (cur === hex ? " on" : "");
+    b.style.background = hex;
+    b.title = hex;
+    b.addEventListener("click", () => { setTint(hex); });
+    pal.appendChild(b);
+  });
+  const pick = document.createElement("input");
+  pick.type = "color";
+  pick.value = cur || "#efe1cd";
+  pick.title = "自己挑一个色";
+  pick.addEventListener("input", () => setTint(pick.value));
+  pal.appendChild(pick);
+  const lb = document.getElementById("palLabel");
+  if (lb) lb.textContent = (baseTarget === "wall" ? "墙面色" : "地板底色") +
+    （cur ? "：" + cur : "（没设，用默认）"）;
+}
+function setTint(hex) {
+  DATA[curRoom].tint[baseTarget] = hex;
+  draw(); render(); updateSwatch(); paintPal();
 }
 
 /* ---------- 拖拽（摆家具） ---------- */
@@ -731,6 +777,7 @@ const mFur    = document.getElementById("mFur");
 const mBase   = document.getElementById("mBase");
 const baseCtl = document.getElementById("baseCtl");
 const baseCtl2= document.getElementById("baseCtl2");
+const baseCtl3= document.getElementById("baseCtl3");
 const toolRow = document.getElementById("toolRow");
 const themeSel= document.getElementById("theme");
 const tipEl   = document.getElementById("tip");
@@ -742,13 +789,15 @@ function setMode(m) {
   mBase.classList.toggle("on", isBase);
   baseCtl.style.display  = isBase ? "flex" : "none";
   baseCtl2.style.display = isBase ? "flex" : "none";
+  baseCtl3.style.display = isBase ? "flex" : "none";
   toolRow.style.display  = isBase ? "none" : "flex";
   themeSel.style.display = isBase ? "none" : "";
   document.body.classList.toggle("base", isBase);
 
   if (isBase) {
-    tipEl.textContent = "红叉＝会被跳过的格子。「力度」换一档就能多认或少认一些；红叉太多就调「严」，还有漏的就调「松」。";
+    tipEl.textContent = "红叉＝会被跳过的格子。「底色」那一排：贴墙时管墙面色，贴地时管地板底色。";
     sel = -1;
+    paintPal();
     buildAtlas();
   } else {
     tipEl.textContent = "左边点一下 → 进屋子；拖屋里那件 → 挪位置；点中会亮黄边。";
@@ -768,6 +817,7 @@ function setTarget(t) {
   tFloor.classList.toggle("on", t === "floor");
   sheetKey = (t === "wall") ? "walls" : "floors";
   sheetSel.value = sheetKey;
+  paintPal();
   buildAtlas();
 }
 tWall.addEventListener("click", () => setTarget("wall"));
@@ -795,6 +845,12 @@ function nudgeRow(d) {
 }
 document.getElementById("rowUp").addEventListener("click", () => nudgeRow(-1));
 document.getElementById("rowDn").addEventListener("click", () => nudgeRow(1));
+
+/* 底色回默认 */
+document.getElementById("tintClr").addEventListener("click", () => {
+  DATA[curRoom].tint[baseTarget] = null;
+  draw(); render(); updateSwatch(); paintPal();
+});
 
 /* 去留白 */
 const cleanBtn = document.getElementById("clean");
@@ -856,7 +912,7 @@ document.getElementById("zS").addEventListener("click", () => setZoom(12));
 document.getElementById("zM").addEventListener("click", () => setZoom(20));
 document.getElementById("zL").addEventListener("click", () => setZoom(30));
 
-/* 清掉当前这一层 */
+/* 清掉贴图 */
 document.getElementById("clrBase").addEventListener("click", () => {
   DATA[curRoom][baseTarget] = null;
   draw(); render(); updateSwatch(); drawAtlas();
@@ -876,7 +932,7 @@ copyBtn.addEventListener("click", async () => {
 });
 
 /* ---------- 清单输出 ---------- */
-function part(o) {
+function tilePart(o) {
   if (!o) return "";
   return o.s + '", c:' + o.c + ', r:' + o.r + ', lc:' + (o.lc || 1) + ', lr:' + (o.lr || 1) +
          (o.fit ? ", fit:true" : "") + (o.clean ? ", clean:true" : "");
@@ -885,8 +941,10 @@ function render() {
   const d = DATA[curRoom];
   const L = ["// " + ROOM_BY_KEY[curRoom].label];
   const b = [];
-  if (d.wall)  b.push('wall:{ s:"'  + part(d.wall)  + ' }');
-  if (d.floor) b.push('floor:{ s:"' + part(d.floor) + ' }');
+  if (d.wall)      b.push('wall:{ s:"'  + tilePart(d.wall)  + ' }');
+  if (d.floor)     b.push('floor:{ s:"' + tilePart(d.floor) + ' }');
+  if (d.tint.wall) b.push('wallTint:"'  + d.tint.wall  + '"');
+  if (d.tint.floor)b.push('floorTint:"' + d.tint.floor + '"');
   if (b.length) L.push("base: { " + b.join(", ") + " },");
   if (d.items.length) {
     L.push("items: [");
@@ -908,7 +966,7 @@ ROOMS.forEach(r => {
 });
 roomSel.addEventListener("change", () => {
   curRoom = roomSel.value; sel = -1;
-  if (mode === "base") buildAtlas();
+  if (mode === "base") { paintPal(); buildAtlas(); }
   draw(); render();
 });
 
@@ -923,6 +981,7 @@ themeSel.addEventListener("change", () => { if (mode === "furniture") scan(theme
 setFitButtons();
 setCleanBtn();
 setHdrBtn();
+paintPal();
 scan(THEMES[0].key);
 fit();
 render();
