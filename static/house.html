@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#14131a">
-<title>我们家 · v4.3</title>
+<title>我们家 · v4.4</title>
 <style>
   html,body{margin:0;height:100%;background:#14131a;overflow:hidden;
     -webkit-user-select:none;user-select:none;touch-action:none;
@@ -18,18 +18,19 @@
 <script>
 "use strict";
 /* ============================================================
-   我们家 · v4.3
-   v4.0 定颜色     v4.1 认 base.json     v4.2 落点 + 拆厨房那扇门
+   我们家 · v4.4
+   v4.0 颜色   v4.1 认 base.json   v4.2 落点/拆厨房门   v4.3 人永远在最上层
 
-   v4.3（2026-10-12 晚）：人和家具的前后。
-     之前是拿「谁的下沿靠下谁在前」在排，家具和人也一起排。
-     结果宁宁走进厨房那块地，人就被台面、灶台压住了 ——
-     因为她站的 y 比那几件的下沿还小，按规矩就得画在人家后头。
-     现在改成：
-       · 家具之间，还是看下沿（谁靠下谁压上面）
-       · 人（宁宁 / 清泽 / 小橘）永远最后画，永远在最上层
-     代价是不能再「躲到柜子背后」。真需要躲的时候再加开关，
-     眼下看得见人比那点立体感要紧。
+   v4.4（2026-10-12 晚）：摆了台面上的小东西。
+     瓶子、油瓶、砧板、灶上的锅、桌上的碗碟 —— 它们本来就摆在台面／桌面上，
+     可是下沿比台面高，按「谁靠下谁压上面」的规矩，一律被台面盖住。
+     现在清单里给这类东西写一个 top:true，它们就画在所有家具之后、人之前。
+     写在哪几件上：宁宁点名的那些，清泽在 base.json 里标。
+
+   分三层画：
+     ① 普通家具（按谁的下沿靠下谁压上面）
+     ② top:true 的（台面上、桌面上的小东西）
+     ③ 人（宁宁 / 清泽 / 小橘）—— 永远最上
 
    数据源：GET /home、/messages、/base.json
    素材：Tiles by LimeZu — https://limezu.itch.io/
@@ -803,16 +804,20 @@ function frame(now) {
 
   const bob = ning.step > 0 ? Math.sin(ning.step * 2) * 1.6 : 0;
 
-  /* 第一步：家具自己排前后 —— 下沿靠下的压在靠上的上面 */
+  /* 第一层：普通家具 —— 谁的下沿靠下谁压上面 */
   const items = furnOf(cur);
-  const actors = [];
+  const low = [], high = [];
   for (let i = 0; i < items.length; i++) {
     const o = items[i];
-    actors.push({ y: o.y + o.h, i: i, f: () => drawTile(o) });
+    (o.top === true ? high : low).push({ y: o.y + o.h, i: i, f: () => drawTile(o) });
   }
-  actors.sort((a, b) => (a.y - b.y) || (a.i - b.i)).forEach(a => a.f());
+  const byDepth = (a, b) => (a.y - b.y) || (a.i - b.i);
+  low.sort(byDepth).forEach(a => a.f());
 
-  /* 第二步：人最后画，永远在最上层。宁可少一点立体感，也不能让人被柜子吃掉。 */
+  /* 第二层：台面上、桌面上的小东西 —— 点名 top:true 的，压在所有大家具上头 */
+  high.sort(byDepth).forEach(a => a.f());
+
+  /* 第三层：人。永远最上。 */
   if (HOME.catRoomId === cur) drawCat(cat.x, cat.y);
   if (HOME.roomId === cur)    drawQz();
   drawNing(bob);
