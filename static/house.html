@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#14131a">
-<title>我们家 · v4.2</title>
+<title>我们家 · v4.3</title>
 <style>
   html,body{margin:0;height:100%;background:#14131a;overflow:hidden;
     -webkit-user-select:none;user-select:none;touch-action:none;
@@ -18,18 +18,19 @@
 <script>
 "use strict";
 /* ============================================================
-   我们家 · v4.2
-   v4.0 定颜色（暖绿墙 + 暖棕地）
-   v4.1 认 base.json：宁宁在 editor 里摆的东西照单搬进来
+   我们家 · v4.3
+   v4.0 定颜色     v4.1 认 base.json     v4.2 落点 + 拆厨房那扇门
 
-   v4.2（2026-10-12 晚）修两件宁宁发现的：
-     1. 人一进屋就站在家具堆里，被压住看不见。
-        → 进屋的落点从 y=520 挪到 y=260，落在地当中那片空地上，走进来再往里去。
-     2. 客厅右／中那扇「厨房」门还挂着。厨房已经变成客厅里的一块地了，
-        不该再有一条门通到另一个厨房。
-        → 每个屋子可以写 hideDoor，客厅写了 ["kitchen"]，门位自动重排。
+   v4.3（2026-10-12 晚）：人和家具的前后。
+     之前是拿「谁的下沿靠下谁在前」在排，家具和人也一起排。
+     结果宁宁走进厨房那块地，人就被台面、灶台压住了 ——
+     因为她站的 y 比那几件的下沿还小，按规矩就得画在人家后头。
+     现在改成：
+       · 家具之间，还是看下沿（谁靠下谁压上面）
+       · 人（宁宁 / 清泽 / 小橘）永远最后画，永远在最上层
+     代价是不能再「躲到柜子背后」。真需要躲的时候再加开关，
+     眼下看得见人比那点立体感要紧。
 
-   家具默认不挡路（solid:false）。谁该挡，跟清泽说，一件一件开。
    数据源：GET /home、/messages、/base.json
    素材：Tiles by LimeZu — https://limezu.itch.io/
    ============================================================ */
@@ -40,9 +41,8 @@ const FLOOR = { x0: 12, x1: 348, y0: WALL_Y, y1: 570 };
 const BAR_Y = 570;
 const LIVING_ID = "living";
 const SPEED = 118;
-const SPAWN = { x: 180, y: 260 };   /* 进屋落点：地当中那片空地 */
+const SPAWN = { x: 180, y: 260 };
 
-/* ---------- 贴图路径 ---------- */
 const BASE = {
   in: "tiles/1_Interiors/32x32/Theme_Sorter_Singles_32x32/",
   ex: "tiles/Modern_Exteriors_32x32/ME_Theme_Sorter_32x32/"
@@ -70,7 +70,6 @@ const SHEET_DEF = {
   base:   { file:"Room_Builder_baseboards_32x32.png",    cols:6,  rows:6  }
 };
 
-/* ---------- 人物：四层拼装 ---------- */
 const CG = "tiles/2_Characters/Character_Generator/";
 const CELLW = 32, CELLH = 32;
 const ROW_FRONT = 1;
@@ -96,7 +95,6 @@ for (let i = 1; i <= 33; i++) OUTFITS.push("Outfit_" + String(i).padStart(2, "0"
 let ningOutfitIdx = 12;
 function outfitPath(key) { return "Outfits/32x32/" + key + "_32x32_01.png"; }
 
-/* ---------- 图片缓存 ---------- */
 const IMG = Object.create(null);
 function loadCG(u) {
   let e = IMG["#" + u];
@@ -145,11 +143,6 @@ const cv = document.getElementById("c");
 const ctx = cv.getContext("2d");
 ctx.imageSmoothingEnabled = false;
 
-/* ============================================================
-   屋子
-   hideDoor：这间屋里不挂哪几扇门。厨房已经是客厅里的一块地，
-             客厅就不该再有一扇门通到「厨房」去。
-   ============================================================ */
 const ROOMS = {
   living:  { name:"客厅", wall:["#e3e7cf","#d5dbc0"], floor:["#e0c9a6","#d2b78e"], line:"rgba(150,112,70,.22)", plank:true,
              qz:{ x:170, y:330 }, cat:{ x:92, y:470 }, hideDoor:["kitchen"] },
@@ -166,7 +159,6 @@ ROOM_ORDER.forEach(id => { ROOMS[id].bg = null; });
 const REGION_ACTION = { "厨房":"做饭", "猫窝":"看小橘", "书房":"看书", "卧室":"休息", "餐桌":"吃饭" };
 function actionOf(name) { return REGION_ACTION[name] || "进去看看"; }
 
-/* 门：一间屋挂几扇，按数量均匀排开 */
 const DOOR_W = 60, DOOR_H = 92, DOOR_Y = WALL_Y - DOOR_H;
 const DOOR_XS = { 1:[150], 2:[80,240], 3:[22,150,278], 4:[12,116,220,324] };
 function doorsOf(roomId) {
@@ -573,7 +565,6 @@ function tileRect(t, x0, y0, x1, y1) {
   return true;
 }
 
-/* ---------- 人物 ---------- */
 function piece(u, row, col, lift, x, y) {
   const e = loadCG(u);
   if (!e.ok) return false;
@@ -592,7 +583,16 @@ function drawPerson(P, outfitKey, dir, x, y, bob) {
   piece(P.hair, ROW_FRONT, c, 0, x, y);
   ctx.restore();
 }
-
+function drawNing(bob) {
+  shadow(ning.x, ning.y, 12, 4);
+  drawPerson(NING, ningOutfit(), ning.dir, ning.x, ning.y, bob);
+  tag(ning.x, ning.y - 100, "宁宁", true);
+}
+function drawQz() {
+  shadow(qz.x, qz.y, 13, 4);
+  drawPerson(QZ, QZ.outfit, qz.dir, qz.x, qz.y, 0);
+  tag(qz.x, qz.y - 100, "清泽", false);
+}
 function drawCat(x, y) {
   shadow(x, y, 9, 3);
   ctx.save(); ctx.translate(x, y);
@@ -803,25 +803,19 @@ function frame(now) {
 
   const bob = ning.step > 0 ? Math.sin(ning.step * 2) * 1.6 : 0;
 
-  const actors = [];
+  /* 第一步：家具自己排前后 —— 下沿靠下的压在靠上的上面 */
   const items = furnOf(cur);
+  const actors = [];
   for (let i = 0; i < items.length; i++) {
     const o = items[i];
-    /* 谁的下沿靠下谁画得晚（就压在上面）。下沿一样时，按清单里的先后。 */
     actors.push({ y: o.y + o.h, i: i, f: () => drawTile(o) });
   }
-  if (HOME.catRoomId === cur) actors.push({ y: cat.y, i: 0, f: () => drawCat(cat.x, cat.y) });
-  if (HOME.roomId === cur)    actors.push({ y: qz.y,  i: 0, f: () => {
-      shadow(qz.x, qz.y, 13, 4);
-      drawPerson(QZ, QZ.outfit, qz.dir, qz.x, qz.y, 0);
-      tag(qz.x, qz.y - 100, "清泽", false);
-  }});
-  actors.push({ y: ning.y, i: 0, f: () => {
-      shadow(ning.x, ning.y, 12, 4);
-      drawPerson(NING, ningOutfit(), ning.dir, ning.x, ning.y, bob);
-      tag(ning.x, ning.y - 100, "宁宁", true);
-  }});
   actors.sort((a, b) => (a.y - b.y) || (a.i - b.i)).forEach(a => a.f());
+
+  /* 第二步：人最后画，永远在最上层。宁可少一点立体感，也不能让人被柜子吃掉。 */
+  if (HOME.catRoomId === cur) drawCat(cat.x, cat.y);
+  if (HOME.roomId === cur)    drawQz();
+  drawNing(bob);
 
   regionPrompt = null;
   const g = regionUnderFeet();
