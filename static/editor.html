@@ -73,6 +73,14 @@
   </div>
   <div class="row" id="baseCtl2" style="display:none;margin-top:6px">
     <button id="clean" class="on">去留白</button>
+    <label class="f">力度
+      <select id="blankLv">
+        <option value="1">严</option>
+        <option value="2" selected>中</option>
+        <option value="3">松</option>
+      </select>
+    </label>
+    <button id="rowHdr" >横条也去</button>
     <button id="fit">凑整铺满</button>
     <button id="zAll">看全</button>
     <button id="zS">小</button>
@@ -109,12 +117,13 @@
    ┌ 摆家具 —— 左边图库 → 点进右边屋子 → 拖位置 → 出来是 items
    └ 铺墙地 —— 左边是一张 Room_Builder 大表，点一格 → 铺到当前房间 → 出来是 base
 
-   ★ 去留白（12 号下午宁宁发现的）
-     作者在素材表里塞了很多「纯黑」「纯白」的空格子，当分隔用的。
-     铺墙的时候这些格子会变成一条条黑线白线，很难看。
-     开着「去留白」，程序会先把整张表扫一遍，认出这些空格；
-     铺的时候碰到空格，就沿用上一格的内容 —— 不留洞，也不出黑线白线。
-     大表上空格子会画一道斜杠，一眼就知道哪些是要跳过的。
+   ★ 去留白（12 号下午宁宁发现、清泽做的）
+     作者在素材表里塞了不少纯黑、纯白的格子当分隔，还有些近白的横条。
+     铺墙的时候它们会变成黑线白线，很难看。
+     开着「去留白」，程序先把整张表扫一遍，认出这些格子；
+     铺的时候碰到就沿用上一格的内容 —— 不留洞，也不出黑白杠。
+     大表上被认出来的格子会画红叉，一眼看得见。
+     「力度」严 / 中 / 松 用来调它认得多狠；红叉太多或太少就换一档。
 
    ★ 一块墙纸有多大
      墙纸不是一格一格，是「一块」——横着几列、竖着几行。
@@ -201,6 +210,8 @@ let loopCols   = 4;
 let loopRows   = 4;
 let fitMode    = true;
 let cleanMode  = true;    // 去留白
+let blankLevel = 2;       // 1 严 / 2 中 / 3 松
+let rowHdrMode = false;   // 整行也算留白
 
 const cv  = document.getElementById("c");
 const ctx = cv.getContext("2d");
@@ -227,10 +238,21 @@ function getImg(u, cb) {
 const SHEET = Object.create(null);
 let sheetStatus = "";
 
-/* 一格是不是「留白」：整格颜色几乎一样，而且要么很黑要么很白 */
+/* 一格是不是「留白」：
+   先取 2%~98% 分位（丢掉零星几个杂点），
+   再要求：这一段范围够窄（整格几乎一个色），而且要么很暗要么很亮。 */
+const LV = {
+  1: { dev: 14, dark: 48, light: 208 },
+  2: { dev: 26, dark: 78, light: 188 },
+  3: { dev: 46, dark: 104, light: 166 }
+};
+
 function analyze(s, sh) {
-  if (s.ana) return s.ana;
-  let empty = null;
+  const conf = LV[blankLevel] || LV[2];
+  const key = blankLevel + (rowHdrMode ? "-h" : "");
+  if (s.ana && s.anaKey === key) return s.ana;
+
+  let empty = null, rowBlank = null, colBlank = null, n = 0;
   try {
     const t = document.createElement("canvas");
     t.width  = sh.cols * 32;
@@ -240,41 +262,67 @@ function analyze(s, sh) {
     g.drawImage(s.el, 0, 0, t.width, t.height);
     const pix = g.getImageData(0, 0, t.width, t.height).data;
     const W2 = t.width;
+
     empty = new Uint8Array(sh.cols * sh.rows);
-    let n = 0;
+    const hist = new Int32Array(256);
+
     for (let r = 0; r < sh.rows; r++) {
       for (let c = 0; c < sh.cols; c++) {
-        let mn = 255, mx = 0;
+        hist.fill(0);
         for (let y = 0; y < 32; y++) {
           let idx = ((r * 32 + y) * W2 + c * 32) * 4;
           for (let x = 0; x < 32; x++, idx += 4) {
-            const v = Math.max(pix[idx], pix[idx + 1], pix[idx + 2]);
-            if (v < mn) mn = v;
-            if (v > mx) mx = v;
+            hist[Math.max(pix[idx], pix[idx + 1], pix[idx + 2])]++;
           }
         }
-        const isBlank = (mx - mn) < 12 && (mx < 44 || mn > 212);
+        const total = 1024, cut = Math.floor(total * 0.02);
+        let acc = 0, p2 = 0, p98 = 255;
+        for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc >= cut) { p2 = v; break; } }
+        acc = 0;
+        for (let v = 255; v >= 0; v--) { acc += hist[v]; if (acc >= cut) { p98 = v; break; } }
+        const dev = p98 - p2;
+        const isBlank = dev < conf.dev && (p98 < conf.dark || p2 > conf.light);
         if (isBlank) { empty[r * sh.cols + c] = 1; n++; }
       }
     }
+
+    /* 整行 / 整列基本全空 → 连那些带一点浅纹的横条也一起算掉 */
+    if (rowHdrMode) {
+      rowBlank = new Uint8Array(sh.rows);
+      colBlank = new Uint8Array(sh.cols);
+      for (let r = 0; r < sh.rows; r++) {
+        let cnt = 0;
+        for (let c = 0; c < sh.cols; c++) cnt += empty[r * sh.cols + c];
+        if (cnt >= sh.cols * 0.75) rowBlank[r] = 1;
+      }
+      for (let c = 0; c < sh.cols; c++) {
+        let cnt = 0;
+        for (let r = 0; r < sh.rows; r++) cnt += empty[r * sh.cols + c];
+        if (cnt >= sh.rows * 0.5) colBlank[c] = 1;
+      }
+    }
+
     s.blankCount = n;
   } catch (e) {
-    empty = null;   // 读像素失败就当作没留白，不挡事
+    empty = null;
   }
-  s.ana = { empty: empty };
+  s.ana = { empty: empty, rowBlank: rowBlank, colBlank: colBlank };
+  s.anaKey = key;
   return s.ana;
 }
 function isBlank(sh, s, c, r) {
   const a = s.ana;
   if (!a || !a.empty) return false;
   if (c < 0 || r < 0 || c >= sh.cols || r >= sh.rows) return false;
+  if (a.colBlank && a.colBlank[c]) return true;
+  if (a.rowBlank && a.rowBlank[r]) return true;
   return a.empty[r * sh.cols + c] === 1;
 }
 
 function sheetOf(sh) {
   let s = SHEET[sh.key];
   if (s) return s;
-  s = SHEET[sh.key] = { ok:false, el:new Image(), url:"", i:0, ana:null, blankCount:0 };
+  s = SHEET[sh.key] = { ok:false, el:new Image(), url:"", i:0, ana:null, anaKey:"", blankCount:0 };
   (function tryNext() {
     if (s.i >= RB_LIST.length) {
       sheetStatus = "读不到大表（试过 " + RB_LIST.length + " 个路径）";
@@ -285,10 +333,9 @@ function sheetOf(sh) {
     s.url = u;
     s.el.onload  = () => {
       s.ok = true;
-      const a = analyze(s, sh);
-      const nb = a.empty ? s.blankCount : 0;
-      sheetStatus = "已读到 " + sh.file + "（" + s.el.naturalWidth + "×" + s.el.naturalHeight + "）" +
-                    (a.empty ? "　留白 " + nb + " 格" : "　（留白没扫出来）");
+      s.ana = null; s.anaKey = "";
+      analyze(s, sh);
+      sheetStatus = "已读到 " + sh.file + "（" + s.el.naturalWidth + "×" + s.el.naturalHeight + "）";
       scheduleUi();
     };
     s.el.onerror = () => { s.i++; tryNext(); };
@@ -357,11 +404,12 @@ function tileArea(t, x0, y0, x1, y1) {
   const lc = Math.max(1, t.lc || 1);
   const lr = Math.max(1, t.lr || 1);
   const clean = !!t.clean;
+  if (clean) analyze(s, sh);      // 先把这一档扫出来
 
   const nCols = Math.ceil(wArea / tw);
   const nRows = Math.ceil(hArea / th);
 
-  let lastC = t.c, lastR = t.r;   // 上一格用了什么，遇到留白就沿用它
+  let lastC = t.c, lastR = t.r;
   for (let j = 0; j < nRows; j++) {
     for (let i = 0; i < nCols; i++) {
       let col = (t.c + (i % lc)) % sh.cols;
@@ -474,7 +522,13 @@ function addCell(key, num, u) {
 function updateStatusLine() {
   const el = document.getElementById("atlasStatus");
   if (!el) return;
-  el.textContent = sheetStatus || "正在读大表…";
+  const sh = SHEET_BY[sheetKey];
+  const s  = SHEET[sh.key];
+  let txt = sheetStatus || "正在读大表…";
+  if (s && s.ok && s.ana && s.ana.empty && cleanMode) {
+    txt += "　留白 " + s.blankCount + " 格（" + ["", "严", "中", "松"][blankLevel] + "）";
+  }
+  el.textContent = txt;
   el.className = "status" + (sheetStatus.indexOf("读不到") === 0 ? " warn" : "");
 }
 function updateSwatch() {
@@ -576,20 +630,22 @@ function drawAtlas() {
     g.fillText("正在读大表 …", 8, 20);
   }
 
-  /* 空格子画一道斜杠，一眼看出哪些会被跳过 */
-  if (cleanMode && s.ana && s.ana.empty) {
-    g.save();
-    g.strokeStyle = "rgba(255,140,140,.55)";
-    g.lineWidth = 1;
-    for (let r = 0; r < sh.rows; r++) {
-      for (let c = 0; c < sh.cols; c++) {
-        if (!s.ana.empty[r * sh.cols + c]) continue;
-        const x = c * atlasTile, y = r * atlasTile, t = atlasTile;
-        g.beginPath(); g.moveTo(x + 2, y + 2); g.lineTo(x + t - 2, y + t - 2); g.stroke();
-        g.beginPath(); g.moveTo(x + t - 2, y + 2); g.lineTo(x + 2, y + t - 2); g.stroke();
+  if (cleanMode && s.ok) {
+    const a = analyze(s, sh);
+    if (a && a.empty) {
+      g.save();
+      g.strokeStyle = "rgba(255,140,140,.6)";
+      g.lineWidth = 1;
+      for (let r = 0; r < sh.rows; r++) {
+        for (let c = 0; c < sh.cols; c++) {
+          if (!isBlank(sh, s, c, r)) continue;
+          const x = c * atlasTile, y = r * atlasTile, t = atlasTile;
+          g.beginPath(); g.moveTo(x + 2, y + 2); g.lineTo(x + t - 2, y + t - 2); g.stroke();
+          g.beginPath(); g.moveTo(x + t - 2, y + 2); g.lineTo(x + 2, y + t - 2); g.stroke();
+        }
       }
+      g.restore();
     }
-    g.restore();
   }
 
   g.strokeStyle = "rgba(255,214,150,.20)"; g.lineWidth = 1;
@@ -691,7 +747,7 @@ function setMode(m) {
   document.body.classList.toggle("base", isBase);
 
   if (isBase) {
-    tipEl.textContent = "「去留白」开着，那些纯黑纯白的空格会被跳过（大表上画红叉的就是）。「横着/竖着」填一块墙纸的大小。";
+    tipEl.textContent = "红叉＝会被跳过的格子。「力度」换一档就能多认或少认一些；红叉太多就调「严」，还有漏的就调「松」。";
     sel = -1;
     buildAtlas();
   } else {
@@ -747,7 +803,25 @@ cleanBtn.addEventListener("click", () => {
   cleanMode = !cleanMode;
   setCleanBtn();
   ["wall", "floor"].forEach(k => { const o = DATA[curRoom][k]; if (o) o.clean = cleanMode; });
-  draw(); render(); drawAtlas(); updateSwatch();
+  draw(); render(); drawAtlas(); updateSwatch(); updateStatusLine();
+});
+
+/* 力度 */
+const lvSel = document.getElementById("blankLv");
+lvSel.addEventListener("change", () => {
+  blankLevel = Number(lvSel.value) || 2;
+  Object.keys(SHEET).forEach(k => { SHEET[k].ana = null; SHEET[k].anaKey = ""; });
+  draw(); drawAtlas(); updateStatusLine();
+});
+
+/* 横条也去 */
+const hdrBtn = document.getElementById("rowHdr");
+function setHdrBtn() { hdrBtn.classList.toggle("on", rowHdrMode); }
+hdrBtn.addEventListener("click", () => {
+  rowHdrMode = !rowHdrMode;
+  setHdrBtn();
+  Object.keys(SHEET).forEach(k => { SHEET[k].ana = null; SHEET[k].anaKey = ""; });
+  draw(); drawAtlas(); updateStatusLine();
 });
 
 /* 凑整铺满 */
@@ -848,6 +922,7 @@ themeSel.addEventListener("change", () => { if (mode === "furniture") scan(theme
 /* ---------- 起步 ---------- */
 setFitButtons();
 setCleanBtn();
+setHdrBtn();
 scan(THEMES[0].key);
 fit();
 render();
