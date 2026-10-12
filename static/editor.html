@@ -25,7 +25,6 @@
   .lib .cell:active{border-color:var(--hot)}
   .lib .cell img{image-rendering:pixelated;width:100%;height:38px;object-fit:contain;display:block;pointer-events:none}
   .lib .cell b{display:block;font-size:9px;color:var(--dim);font-weight:500;pointer-events:none}
-  /* 铺墙地模式：左栏变宽，放素材大表 */
   body.base .lib{display:block;width:clamp(180px,40%,400px);padding:6px}
   .lib .hint{font-size:11px;color:var(--dim);margin:0 0 6px}
   .lib .status{font-size:11px;color:var(--dim);margin:0 0 6px;word-break:break-all}
@@ -56,6 +55,7 @@
     <select id="sheet"></select>
     <button id="kFlat">一格格平铺</button>
     <button id="kCol" class="on">整列往下铺</button>
+    <button id="fit">凑整铺满</button>
     <button id="zS">小</button>
     <button id="zM">中</button>
     <button id="zL">大</button>
@@ -86,14 +86,16 @@
 "use strict";
 /* ============================================================
    摆家 · editor
-   两种模式：
-     摆家具 —— 左边图库 → 点进右边屋子 → 拖位置 → 出来是 items
-     铺墙地 —— 左边是一张 Room_Builder 大表，点一格 → 铺到当前房间 → 出来是 base
+   ┌ 摆家具 —— 左边图库 → 点进右边屋子 → 拖位置 → 出来是 items
+   └ 铺墙地 —— 左边是一张 Room_Builder 大表，点一格 → 铺到当前房间 → 出来是 base
 
-   铺法两种（12 号下午她说「全墙一格格有点怪」之后加的）：
-     flat 一格格平铺  —— 只用点中的那一格，横竖都重复
-     col  整列往下铺  —— 从点中那一行开始，同一列一行一行往下走，铺满了再从头来
-                         （整套墙纸本来就是一张竖着的长条，用这个才连得上）
+   铺法（12 号下午加的）：
+     col  整列往下铺  —— 从点中那行开始，同一列一行行往下走，铺完再从头
+     flat 一格格平铺  —— 只用点中那一格，横竖都重复（地板用这个）
+
+   凑整铺满（12 号下午加的）：
+     墙区高 150、一块 32 → 150÷32＝4.6875，除不尽，底下会剩半截。
+     点开「凑整铺满」就自己算成整数行（150→5 行，一格 30），四边都齐。
 
    坐标跟 house.html 一致：x=左, y=顶, w=显示宽, h=到底边的框
    素材：Tiles by LimeZu —— https://limezu.itch.io/
@@ -165,11 +167,12 @@ ROOMS.forEach(r => { DATA[r.key] = { wall:null, floor:null, items:[] }; });
 
 let curRoom    = "living";
 let sel        = -1;
-let mode       = "furniture";   // furniture | base
-let baseTarget = "wall";        // wall | floor
+let mode       = "furniture";
+let baseTarget = "wall";
 let sheetKey   = "walls";
 let atlasTile  = 20;
-let tileKind   = "col";         // flat | col   墙默认整列，地板默认平铺
+let tileKind   = "col";     // flat | col
+let fitMode    = true;      // 凑整铺满，默认开
 
 const cv  = document.getElementById("c");
 const ctx = cv.getContext("2d");
@@ -192,7 +195,7 @@ function getImg(u, cb) {
   return e;
 }
 
-/* ---------- 大表加载（不会递归） ---------- */
+/* ---------- 大表加载（不递归） ---------- */
 const SHEET = Object.create(null);
 let sheetStatus = "";
 
@@ -258,8 +261,7 @@ function boxOf(o) {
   return { x: o.x, y: o.y + o.h - h, w: o.w, h: h };
 }
 
-/* 铺一片区域
-   t = { s, c, r, m:"flat"|"col" } */
+/* 铺一片区域。t = { s, c, r, m:"flat"|"col", fit:bool } */
 function tileArea(t, x0, y0, x1, y1) {
   if (!t) return false;
   const sh = SHEET_BY[t.s];
@@ -267,14 +269,29 @@ function tileArea(t, x0, y0, x1, y1) {
   const s = sheetOf(sh);
   if (!s.ok) return false;
 
-  let k = 0;
-  for (let y = y0; y < y1; y += TILE, k++) {
-    const row = (t.m === "col") ? ((t.r + k) % sh.rows) : t.r;
-    const sx = t.c * 32, sy = row * 32;
-    for (let x = x0; x < x1; x += TILE) {
-      const w = Math.min(TILE, x1 - x);
-      const h = Math.min(TILE, y1 - y);
-      ctx.drawImage(s.el, sx, sy, w, h, x, y, w, h);
+  const wArea = x1 - x0, hArea = y1 - y0;
+
+  let tw = TILE, th = TILE;
+  if (t.fit) {
+    const cols = Math.max(1, Math.round(wArea / TILE));
+    const rows = Math.max(1, Math.round(hArea / TILE));
+    tw = wArea / cols;
+    th = hArea / rows;
+  }
+
+  const nCols = Math.ceil(wArea / tw);
+  const nRows = Math.ceil(hArea / th);
+
+  for (let j = 0; j < nRows; j++) {
+    const row = (t.m === "col") ? ((t.r + j) % sh.rows) : t.r;
+    const sy  = row * 32;
+    const dy  = y0 + j * th;
+    const dh  = Math.min(th, y1 - dy);
+    for (let i = 0; i < nCols; i++) {
+      const sx = t.c * 32;
+      const dx = x0 + i * tw;
+      const dw = Math.min(tw, x1 - dx);
+      ctx.drawImage(s.el, sx, sy, dw, dh, dx, dy, dw, dh);
     }
   }
   return true;
@@ -389,7 +406,7 @@ function updateSwatch() {
   const s = sheetOf(SHEET_BY[cur.s]);
   if (s.ok) g.drawImage(s.el, cur.c * 32, cur.r * 32, 32, 32, 0, 0, 32, 32);
   sp.textContent = SHEET_BY[cur.s].label + " 第 " + cur.c + " 列 / 第 " + cur.r + " 行　" +
-                   (cur.m === "col" ? "整列往下" : "一格格");
+                   (cur.m === "col" ? "整列" : "平铺") + (cur.fit ? "　凑整" : "");
 }
 
 function buildAtlas() {
@@ -430,7 +447,7 @@ function buildAtlas() {
     const c  = Math.floor((ev.clientX - r.left) / atlasTile);
     const rr = Math.floor((ev.clientY - r.top ) / atlasTile);
     if (c < 0 || rr < 0 || c >= sh.cols || rr >= sh.rows) return;
-    DATA[curRoom][baseTarget] = { s: sheetKey, c: c, r: rr, m: tileKind };
+    DATA[curRoom][baseTarget] = { s: sheetKey, c: c, r: rr, m: tileKind, fit: fitMode };
     draw(); render(); drawAtlas(); updateSwatch();
   });
 
@@ -466,14 +483,10 @@ function drawAtlas() {
   if (cur && cur.s === sheetKey) {
     g.strokeStyle = "#ffd696"; g.lineWidth = 2;
     g.strokeRect(cur.c * atlasTile + 1, cur.r * atlasTile + 1, atlasTile - 2, atlasTile - 2);
-    if (cur.m === "col") {
-      g.strokeStyle = "rgba(255,214,150,.45)"; g.lineWidth = 1;
-      g.strokeRect(cur.c * atlasTile + 3, cur.r * atlasTile + 3, atlasTile - 6, atlasTile - 6);
-    }
   }
 }
 
-/* ---------- 拖拽（只在摆家具模式生效） ---------- */
+/* ---------- 拖拽 ---------- */
 let drag = null;
 cv.addEventListener("pointerdown", (ev) => {
   if (mode !== "furniture") return;
@@ -551,7 +564,7 @@ function setMode(m) {
   document.body.classList.toggle("base", isBase);
 
   if (isBase) {
-    tipEl.textContent = "「整列往下铺」适合墙纸（连得上），「一格格平铺」适合地板。点大表一格就铺上，不满意再点一格。";
+    tipEl.textContent = "墙用「整列往下铺」，地板用「一格格平铺」。「凑整铺满」开着，就不会在边角剩半截。";
     sel = -1;
     buildAtlas();
   } else {
@@ -588,6 +601,19 @@ function setKindButtons() {
 }
 kFlat.addEventListener("click", () => { tileKind = "flat"; setKindButtons(); });
 kCol.addEventListener("click",  () => { tileKind = "col";  setKindButtons(); });
+
+/* 凑整铺满 */
+const fitBtn = document.getElementById("fit");
+function setFitButtons() { fitBtn.classList.toggle("on", fitMode); }
+fitBtn.addEventListener("click", () => {
+  fitMode = !fitMode;
+  setFitButtons();
+  const cur = DATA[curRoom][baseTarget];
+  const other = DATA[curRoom][baseTarget === "wall" ? "floor" : "wall"];
+  if (cur)   { cur.fit = fitMode; }
+  if (other) { other.fit = fitMode; }
+  draw(); render(); updateSwatch();
+});
 
 /* 换素材表 */
 const sheetSel = document.getElementById("sheet");
@@ -628,8 +654,10 @@ function render() {
   const d = DATA[curRoom];
   const L = ["// " + ROOM_BY_KEY[curRoom].label];
   const b = [];
-  if (d.wall)  b.push('wall:{ s:"'  + d.wall.s  + '", c:' + d.wall.c  + ', r:' + d.wall.r  + ', m:"' + (d.wall.m  || "flat") + '" }');
-  if (d.floor) b.push('floor:{ s:"' + d.floor.s + '", c:' + d.floor.c + ', r:' + d.floor.r + ', m:"' + (d.floor.m || "flat") + '" }');
+  if (d.wall)  b.push('wall:{ s:"'  + d.wall.s  + '", c:' + d.wall.c  + ', r:' + d.wall.r  +
+                      ', m:"' + (d.wall.m  || "flat") + '"' + (d.wall.fit  ? ", fit:true" : "") + ' }');
+  if (d.floor) b.push('floor:{ s:"' + d.floor.s + '", c:' + d.floor.c + ', r:' + d.floor.r +
+                      ', m:"' + (d.floor.m || "flat") + '"' + (d.floor.fit ? ", fit:true" : "") + ' }');
   if (b.length) L.push("base: { " + b.join(", ") + " },");
   if (d.items.length) {
     L.push("items: [");
@@ -663,6 +691,8 @@ THEMES.forEach(t => {
 themeSel.addEventListener("change", () => { if (mode === "furniture") scan(themeSel.value); });
 
 /* ---------- 起步 ---------- */
+setKindButtons();
+setFitButtons();
 scan(THEMES[0].key);
 fit();
 render();
