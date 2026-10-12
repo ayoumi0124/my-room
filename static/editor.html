@@ -26,7 +26,7 @@
   .lib .cell img{image-rendering:pixelated;width:100%;height:38px;object-fit:contain;display:block;pointer-events:none}
   .lib .cell b{display:block;font-size:9px;color:var(--dim);font-weight:500;pointer-events:none}
   /* 铺墙地模式：左栏变宽，放素材大表 */
-  body.base .lib{display:block;width:clamp(190px,42%,420px);padding:6px}
+  body.base .lib{display:block;width:clamp(180px,40%,400px);padding:6px}
   .lib .hint{font-size:11px;color:var(--dim);margin:0 0 6px}
   .lib .status{font-size:11px;color:var(--dim);margin:0 0 6px;word-break:break-all}
   .lib .status.warn{color:#ffb0a0}
@@ -90,6 +90,10 @@
    坐标跟 house.html 一致：x=左, y=顶, w=显示宽, h=到底边的框
    素材：Tiles by LimeZu —— https://limezu.itch.io/
    注意：作者把 Builder 拼成 Bulder（少一个 i）。下面 RB_LIST 会两种都试一遍。
+
+   12 号下午修的一个卡顿：
+     原来「加载完成的回调」里又去调自己，表已经在缓存里时会立刻同步回调，
+     于是无限递归 → 页面卡死。现在改成 scheduleUi()：回调里只做一次小的重画。
    ============================================================ */
 
 const W = 360, H = 640, WALL_Y = 150;
@@ -129,8 +133,7 @@ const THEME_BY_KEY = Object.fromEntries(THEMES.map(t => [t.key, t]));
 const urlOf = (c, n) => BASE + THEME_BY_KEY[c].dir + "/" + THEME_BY_KEY[c].pre + n + ".png";
 
 /* ---------- 墙 / 地板素材表 ----------
-   路径写三份，第一个读不到就自动试下一个。
-   要是三个全读不到，左边会红字写「读不到大表」，把那行发给清泽就行。 */
+   路径写三份，第一个读不到就自动试下一个。 */
 const RB_LIST = [
   "tiles/1_Interiors/32x32/Room_Bulder_subfiles_32x32/",
   "tiles/1_Interiors/32x32/Room_Builder_subfiles_32x32/",
@@ -171,7 +174,7 @@ ctx.imageSmoothingEnabled = false;
 const lib = document.getElementById("lib");
 const out = document.getElementById("out");
 
-/* ---------- 图片缓存（带备用路径） ---------- */
+/* ---------- 家具图缓存 ---------- */
 const IMG = Object.create(null);
 function getImg(u, cb) {
   let e = IMG[u];
@@ -186,30 +189,46 @@ function getImg(u, cb) {
   return e;
 }
 
-/* 大表：依次试 RB_LIST 里的路径 */
+/* ---------- 大表加载（不会递归） ---------- */
 const SHEET = Object.create(null);
 let sheetStatus = "";
-function getSheet(sh, cb) {
+
+function sheetOf(sh) {
   let s = SHEET[sh.key];
-  if (s && s.ok) { cb && cb(); return s; }
-  if (!s) {
-    s = SHEET[sh.key] = { ok:false, el:new Image(), url:"", i:0 };
-    (function tryNext() {
-      if (s.i >= RB_LIST.length) {
-        sheetStatus = "读不到大表（试过 " + RB_LIST.length + " 个路径）。第一行是：" + RB_LIST[0] + sh.file;
-        drawAtlas();
-        return;
-      }
-      const u = RB_LIST[s.i] + sh.file;
-      s.url = u;
-      s.el.onload  = () => { s.ok = true; sheetStatus = "已读到 " + sh.file + "  （" + s.el.naturalWidth + "×" + s.el.naturalHeight + "）"; drawAtlas(); draw(); };
-      s.el.onerror = () => { s.i++; tryNext(); };
-      s.el.src = u;
-    })();
-  }
+  if (s) return s;
+  s = SHEET[sh.key] = { ok:false, el:new Image(), url:"", i:0 };
+  (function tryNext() {
+    if (s.i >= RB_LIST.length) {
+      sheetStatus = "读不到大表（试过 " + RB_LIST.length + " 个路径）";
+      scheduleUi();
+      return;
+    }
+    const u = RB_LIST[s.i] + sh.file;
+    s.url = u;
+    s.el.onload  = () => {
+      s.ok = true;
+      sheetStatus = "已读到 " + sh.file + "（" + s.el.naturalWidth + "×" + s.el.naturalHeight + "）";
+      scheduleUi();
+    };
+    s.el.onerror = () => { s.i++; tryNext(); };
+    s.el.src = u;
+  })();
   return s;
 }
-function sheetReady(sh) { const s = SHEET[sh.key]; return s && s.ok ? s : null; }
+
+/* 所有「东西加载好了要重画」的地方都走这里。
+   同一刻只跑一次，而且绝不回头去调调用者 —— 这是 12 号卡顿的根。 */
+let uiTimer = null;
+function scheduleUi() {
+  if (uiTimer) return;
+  uiTimer = setTimeout(() => {
+    uiTimer = null;
+    draw();
+    drawAtlas();
+    updateStatusLine();
+    updateSwatch();
+  }, 0);
+}
 
 /* ---------- 屋子画布 ---------- */
 let scale = 1;
@@ -241,13 +260,13 @@ function boxOf(o) {
   return { x: o.x, y: o.y + o.h - h, w: o.w, h: h };
 }
 
-/* 把一块 32×32 平铺到一片区域 */
+/* 把一块 32×32 平铺到一片区域（只查缓存，不注册回调） */
 function tileArea(t, x0, y0, x1, y1) {
   if (!t) return false;
   const sh = SHEET_BY[t.s];
   if (!sh) return false;
-  const s = sheetReady(sh) || getSheet(sh, () => draw());
-  if (!s || !s.ok) return false;
+  const s = sheetOf(sh);
+  if (!s.ok) return false;
   const sx = t.c * 32, sy = t.r * 32;
   for (let y = y0; y < y1; y += TILE) {
     for (let x = x0; x < x1; x += TILE) {
@@ -354,6 +373,25 @@ function addCell(key, num, u) {
 }
 
 /* ---------- 墙地大表 ---------- */
+function updateStatusLine() {
+  const el = document.getElementById("atlasStatus");
+  if (!el) return;
+  el.textContent = sheetStatus || "正在读大表…";
+  el.className = "status" + (sheetStatus.indexOf("读不到") === 0 ? " warn" : "");
+}
+function updateSwatch() {
+  const sc = document.getElementById("atlasSwatch");
+  const sp = document.getElementById("atlasSwatchText");
+  if (!sc || !sp) return;
+  const cur = DATA[curRoom][baseTarget];
+  const g = sc.getContext("2d");
+  g.clearRect(0, 0, 32, 32);
+  if (!cur) { sp.textContent = "还没铺，下面点一格"; return; }
+  const s = sheetOf(SHEET_BY[cur.s]);
+  if (s.ok) g.drawImage(s.el, cur.c * 32, cur.r * 32, 32, 32, 0, 0, 32, 32);
+  sp.textContent = SHEET_BY[cur.s].label + " 第 " + cur.c + " 列 / 第 " + cur.r + " 行";
+}
+
 function buildAtlas() {
   lib.innerHTML = "";
 
@@ -363,21 +401,17 @@ function buildAtlas() {
   lib.appendChild(hint);
 
   const st = document.createElement("div");
-  st.className = "status" + (sheetStatus.indexOf("读不到") === 0 ? " warn" : "");
-  st.textContent = sheetStatus || "正在读大表…";
+  st.id = "atlasStatus";
+  st.className = "status";
   lib.appendChild(st);
 
   const sw = document.createElement("div");
   sw.className = "swatch";
   const sc = document.createElement("canvas");
+  sc.id = "atlasSwatch";
   sc.width = 32; sc.height = 32;
   const sp = document.createElement("span");
-  const cur = DATA[curRoom][baseTarget];
-  sp.textContent = cur ? (SHEET_BY[cur.s].label + " 第 " + cur.c + " 列 / 第 " + cur.r + " 行") : "还没铺，下面点一格";
-  if (cur) {
-    const s = sheetReady(SHEET_BY[cur.s]);
-    if (s) sc.getContext("2d").drawImage(s.el, cur.c * 32, cur.r * 32, 32, 32, 0, 0, 32, 32);
-  }
+  sp.id = "atlasSwatchText";
   sw.appendChild(sc); sw.appendChild(sp);
   lib.appendChild(sw);
 
@@ -391,18 +425,19 @@ function buildAtlas() {
   box.appendChild(ac);
   lib.appendChild(box);
 
-  drawAtlas();
-
   ac.addEventListener("click", (ev) => {
     const r = ac.getBoundingClientRect();
     const c  = Math.floor((ev.clientX - r.left) / atlasTile);
     const rr = Math.floor((ev.clientY - r.top ) / atlasTile);
     if (c < 0 || rr < 0 || c >= sh.cols || rr >= sh.rows) return;
     DATA[curRoom][baseTarget] = { s: sheetKey, c: c, r: rr };
-    draw(); render(); buildAtlas();
+    draw(); render(); drawAtlas(); updateSwatch();
   });
 
-  getSheet(sh, () => { if (document.getElementById("ac")) { drawAtlas(); buildAtlas(); } });
+  drawAtlas();
+  updateStatusLine();
+  updateSwatch();
+  sheetOf(sh);                 // 没加载就去加载；加载好会自己走 scheduleUi 重画
 }
 
 function drawAtlas() {
@@ -414,13 +449,13 @@ function drawAtlas() {
   const w = ac.width, h = ac.height;
   g.fillStyle = "#1a1922"; g.fillRect(0, 0, w, h);
 
-  const s = sheetReady(sh);
-  if (s) {
+  const s = sheetOf(sh);
+  if (s.ok) {
     g.drawImage(s.el, 0, 0, w, h);
   } else {
     g.fillStyle = "#8c8494";
     g.font = "12px sans-serif";
-    g.fillText("大表读不到 …", 8, 20);
+    g.fillText("正在读大表 …", 8, 20);
   }
 
   g.strokeStyle = "rgba(255,214,150,.20)"; g.lineWidth = 1;
@@ -556,7 +591,7 @@ document.getElementById("zL").addEventListener("click", () => setZoom(30));
 /* 清掉当前这一层 */
 document.getElementById("clrBase").addEventListener("click", () => {
   DATA[curRoom][baseTarget] = null;
-  draw(); render(); buildAtlas();
+  draw(); render(); updateSwatch(); drawAtlas();
 });
 
 /* ---------- 复制清单 ---------- */
