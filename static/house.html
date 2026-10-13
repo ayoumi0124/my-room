@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#14131a">
-<title>我们家 · v4.4</title>
+<title>我们家 · v4.5</title>
 <style>
   html,body{margin:0;height:100%;background:#14131a;overflow:hidden;
     -webkit-user-select:none;user-select:none;touch-action:none;
@@ -18,19 +18,19 @@
 <script>
 "use strict";
 /* ============================================================
-   我们家 · v4.4
-   v4.0 颜色   v4.1 认 base.json   v4.2 落点/拆厨房门   v4.3 人永远在最上层
+   我们家 · v4.5
+   v4.0 颜色  v4.1 认 base.json  v4.2 落点/拆门  v4.3 人最上  v4.4 台面小物
 
-   v4.4（2026-10-12 晚）：摆了台面上的小东西。
-     瓶子、油瓶、砧板、灶上的锅、桌上的碗碟 —— 它们本来就摆在台面／桌面上，
-     可是下沿比台面高，按「谁靠下谁压上面」的规矩，一律被台面盖住。
-     现在清单里给这类东西写一个 top:true，它们就画在所有家具之后、人之前。
-     写在哪几件上：宁宁点名的那些，清泽在 base.json 里标。
+   v4.5（2026-10-13 中午）宁宁选了方案 A：墙不动，把墙做厚。
+     参考的是她那两张「一白一南 / Elovia_」的像素屋，配色照搬暖绿＋暖棕。
+     往墙上加了四样：
+       · 护墙板 —— 墙的下半截压一道深木板，屋子立刻有厚度
+       · 挂画   —— 靠近天花板两幅，一高一矮错着挂
+       · 窗帘   —— 两扇窗两侧各挂一片苔绿窗帘
+       · 吊灯   —— 正中一盏暖黄的，带一圈光晕
+     全部是画的，不依赖素材图；哪天有更好的素材再换。
 
-   分三层画：
-     ① 普通家具（按谁的下沿靠下谁压上面）
-     ② top:true 的（台面上、桌面上的小东西）
-     ③ 人（宁宁 / 清泽 / 小橘）—— 永远最上
+   画三层：① 普通家具（下沿靠下的压上面）② top:true 的台面小物 ③ 人（永远最上）
 
    数据源：GET /home、/messages、/base.json
    素材：Tiles by LimeZu — https://limezu.itch.io/
@@ -43,6 +43,11 @@ const BAR_Y = 570;
 const LIVING_ID = "living";
 const SPEED = 118;
 const SPAWN = { x: 180, y: 260 };
+
+/* 墙上的软装：想换位置就改这几个数 */
+const WAINSCOT_H = 36;                 /* 护墙板高度 */
+const WINDOW_XS  = [90, 216];          /* 两扇窗的左上角 x */
+const LAMP_X     = 180;                /* 吊灯挂在哪 */
 
 const BASE = {
   in: "tiles/1_Interiors/32x32/Theme_Sorter_Singles_32x32/",
@@ -655,6 +660,64 @@ function pill(x, y, w, h, bg, fg, text) {
   ctx.restore();
 }
 
+/* ---------- 墙上的三样：画、窗、灯 ---------- */
+
+/* 一幅挂画：木头框 + 里面一张小风景 */
+function drawFrame(x, y, w, h, paper) {
+  ctx.fillStyle = "rgba(60,42,28,.18)";
+  ctx.fillRect(x + 2, y + 3, w, h);
+  ctx.fillStyle = "#6d5039"; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = paper;     ctx.fillRect(x + 3, y + 3, w - 6, h - 6);
+  ctx.fillStyle = "rgba(255,255,255,.22)";
+  ctx.fillRect(x + 3, y + 3, w - 6, 2);
+  ctx.fillStyle = "rgba(126,158,104,.7)";
+  ctx.fillRect(x + 6, y + h - 11, w - 12, 5);
+  ctx.fillStyle = "rgba(214,178,110,.75)";
+  ctx.beginPath(); ctx.arc(x + w * 0.68, y + h * 0.36, Math.min(w, h) * 0.13, 0, Math.PI * 2); ctx.fill();
+}
+
+/* 一扇窗，两边挂苔绿窗帘 */
+function drawWindow(px, py, w, h) {
+  const cw = 9, ch = h + 14;
+  ctx.fillStyle = "#4e6b4a";
+  ctx.fillRect(px - cw + 1, py - 6, cw, ch);
+  ctx.fillRect(px + w - 1,   py - 6, cw, ch);
+  ctx.fillStyle = "rgba(255,255,255,.16)";
+  ctx.fillRect(px - cw + 3, py - 6, 3, ch);
+  ctx.fillRect(px + w + 1,  py - 6, 3, ch);
+  ctx.fillStyle = "#3d5639";
+  ctx.fillRect(px - cw + 1, py - 6, cw + 2, 3);
+  ctx.fillRect(px + w - 1,  py - 6, cw + 2, 3);
+
+  ctx.fillStyle = "#b9a07c"; ctx.fillRect(px - 2, py - 2, w + 4, h + 4);
+  ctx.fillStyle = cur === "garden" ? "#dcecc8" : "#e4eef2";
+  ctx.fillRect(px + 3, py + 3, w - 6, h - 6);
+  ctx.fillStyle = "rgba(255,255,255,.5)";
+  ctx.beginPath(); ctx.arc(px + w * 0.34, py + h * 0.42, 6, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "rgba(120,100,75,.35)"; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(px + w / 2, py + 3); ctx.lineTo(px + w / 2, py + h - 3); ctx.stroke();
+  ctx.fillStyle = "#b9a07c";
+  ctx.fillRect(px - 4, py + h + 2, w + 8, 4);
+}
+
+/* 一盏吊灯：灯线 + 灯罩 + 一圈暖光 */
+function drawLamp(cx) {
+  ctx.strokeStyle = "#5b4a38"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, 18); ctx.stroke();
+  const g = ctx.createRadialGradient(cx, 40, 3, cx, 40, 62);
+  g.addColorStop(0, "rgba(255,214,150,.30)");
+  g.addColorStop(1, "rgba(255,214,150,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(cx, 40, 62, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#e8c98a";
+  ctx.beginPath();
+  ctx.moveTo(cx - 5, 18); ctx.lineTo(cx + 5, 18);
+  ctx.lineTo(cx + 14, 34); ctx.lineTo(cx - 14, 34);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "rgba(255,240,205,.85)";
+  ctx.fillRect(cx - 14, 32, 28, 3);
+}
+
 function drawWall() {
   const wc = wallColors(cur);
   const g = ctx.createLinearGradient(0, 0, 0, WALL_Y);
@@ -664,19 +727,30 @@ function drawWall() {
   ctx.fillStyle = "rgba(90,80,60,.07)";
   ctx.fillRect(0, 0, W, 6);
 
-  for (const px of [90, 216]) {
-    ctx.fillStyle = "#b9a07c";
-    ctx.fillRect(px, 26, 54, 40);
-    ctx.fillStyle = cur === "garden" ? "#dcecc8" : "#e4eef2";
-    ctx.fillRect(px + 5, 31, 44, 30);
-    ctx.fillStyle = "rgba(255,255,255,.55)";
-    ctx.beginPath(); ctx.arc(px + 20, 44, 6, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = "rgba(120,100,75,.35)"; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(px + 27, 31); ctx.lineTo(px + 27, 61); ctx.stroke();
-  }
+  /* 挂画：贴天花板，一高一矮错着挂，避开中间 */
+  drawFrame(14,  16, 44, 34, "#ded6c2");
+  drawFrame(300, 24, 40, 30, "#d7cdb6");
 
-  ctx.fillStyle = "rgba(60,50,35,.12)";
-  ctx.fillRect(0, WALL_Y - 6, W, 6);
+  /* 窗 + 窗帘 */
+  for (const px of WINDOW_XS) drawWindow(px, 26, 54, 40);
+
+  /* 吊灯 */
+  drawLamp(LAMP_X);
+
+  /* 护墙板 */
+  const wy = WALL_Y - WAINSCOT_H;
+  const wg = ctx.createLinearGradient(0, wy, 0, WALL_Y);
+  wg.addColorStop(0, "#8d6b4a");
+  wg.addColorStop(0.55, "#7a5a3e");
+  wg.addColorStop(1, "#63492f");
+  ctx.fillStyle = wg; ctx.fillRect(0, wy, W, WAINSCOT_H);
+  ctx.fillStyle = "rgba(255,236,190,.24)"; ctx.fillRect(0, wy, W, 3);
+  ctx.fillStyle = "rgba(40,26,14,.22)";    ctx.fillRect(0, wy + 6, W, 2);
+  ctx.fillStyle = "rgba(0,0,0,.16)";       ctx.fillRect(0, WALL_Y - 5, W, 5);
+  ctx.strokeStyle = "rgba(255,236,190,.08)"; ctx.lineWidth = 1;
+  for (let x = 32; x < W; x += 48) {
+    ctx.beginPath(); ctx.moveTo(x + .5, wy + 10); ctx.lineTo(x + .5, WALL_Y - 5); ctx.stroke();
+  }
 }
 
 function drawFloor() {
@@ -814,7 +888,7 @@ function frame(now) {
   const byDepth = (a, b) => (a.y - b.y) || (a.i - b.i);
   low.sort(byDepth).forEach(a => a.f());
 
-  /* 第二层：台面上、桌面上的小东西 —— 点名 top:true 的，压在所有大家具上头 */
+  /* 第二层：台面上、桌面上的小东西 */
   high.sort(byDepth).forEach(a => a.f());
 
   /* 第三层：人。永远最上。 */
