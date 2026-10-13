@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>我们家 · 画布参考图</title>
+<style>
+  html,body{margin:0;background:#14131a;color:#e8e0ea;
+    font-family:-apple-system,"PingFang SC","Noto Sans SC",system-ui,sans-serif;}
+  .wrap{padding:16px 16px 40px;max-width:760px;margin:0 auto;}
+  h1{font-size:17px;font-weight:600;margin:6px 0 4px;}
+  p.sub{font-size:12.5px;color:#9d94a6;margin:0 0 14px;line-height:1.6;}
+  canvas{display:block;width:100%;height:auto;background:#f4f1e8;
+    border-radius:6px;image-rendering:pixelated;}
+  .btns{display:flex;gap:10px;margin:14px 0 18px;flex-wrap:wrap;}
+  button{flex:1;min-width:130px;background:#2f2b45;color:#f2eee3;border:0;
+    border-radius:9px;padding:12px 14px;font-size:13.5px;font-weight:600;
+    font-family:inherit;}
+  button.alt{background:#3d3a52;}
+  table{width:100%;border-collapse:collapse;font-size:12.5px;margin:10px 0 16px;}
+  td,th{padding:7px 8px;border-bottom:1px solid #2b2838;text-align:left;vertical-align:top;}
+  th{color:#9d94a6;font-weight:600;}
+  code{background:#221f33;padding:1px 5px;border-radius:4px;font-size:12px;}
+  .note{font-size:12.5px;color:#b9aec4;line-height:1.7;
+    background:#1c1a26;border-radius:10px;padding:12px 14px;margin:14px 0;}
+  .note b{color:#f2eee3;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>我们家 · 画布参考图</h1>
+  <p class="sub">要自己画的话，照这张来。点下面「存成 PNG」，存下来当描图底。</p>
+
+  <canvas id="g" width="720" height="1280"></canvas>
+
+  <div class="btns">
+    <button id="save">存成 PNG</button>
+    <button class="alt" id="clean">存一张干净的（只有底子、不要标注）</button>
+  </div>
+
+  <table>
+    <tr><th>项</th><th>值</th></tr>
+    <tr><td>画布总大小</td><td><code>360 × 640</code> 像素</td></tr>
+    <tr><td>墙</td><td>x <code>0–360</code>，y <code>0–150</code>（高 150）</td></tr>
+    <tr><td>地板</td><td>x <code>0–360</code>，y <code>150–570</code>（高 420）</td></tr>
+    <tr><td>护墙角</td><td>y <code>138–150</code>（厚 12）</td></tr>
+    <tr><td>四边框</td><td>上 <code>0–15</code>　左 <code>0–15</code>　右 <code>345–360</code>　下 <code>555–570</code>　厚 <code>15</code></td></tr>
+    <tr><td>信息栏</td><td>y <code>570–640</code>（不用画，代码填深色）</td></tr>
+    <tr><td>一格</td><td><code>32 × 32</code> 像素</td></tr>
+    <tr><td>人物</td><td>一格 <code>32×32</code>，显示时放大到 <code>48×48</code></td></tr>
+    <tr><td>人物能走的范围</td><td>x <code>21–339</code>，y <code>154–568</code></td></tr>
+    <tr><td>门</td><td>宽 <code>60</code>，高 <code>92</code>，底边贴在 y <code>=150</code></td></tr>
+  </table>
+
+  <div class="note">
+    <p style="margin:0 0 8px"><b>门开在哪（按房间里有几个门来分）</b></p>
+    <p style="margin:0 0 4px">2 个门 → x = <code>80</code> / <code>240</code></p>
+    <p style="margin:0 0 4px">3 个门 → x = <code>22</code> / <code>150</code> / <code>278</code>　（图上画的是这组）</p>
+    <p style="margin:0 0 4px">4 个门 → x = <code>12</code> / <code>116</code> / <code>220</code> / <code>324</code></p>
+    <p style="margin:8px 0 0">x 是门的<b>左上角</b>。房间名的小牌子挂在门上方 y = <code>130</code> 那一条。</p>
+  </div>
+
+  <div class="note">
+    <p style="margin:0 0 8px"><b>画的时候三条规矩</b></p>
+    <p style="margin:0 0 4px">1 · 导出 PNG，<b>1 像素就是 1 像素</b>，别放大、别开抗锯齿</p>
+    <p style="margin:0 0 4px">2 · 描线用<b>深蓝紫</b> <code>#221f33 / #2f2b45 / #403a5c</code>，不要纯黑</p>
+    <p style="margin:0 0 0">3 · 地板的缝用<b>深棕</b> <code>#5c3420</code> 那档（地板这块是例外）</p>
+  </div>
+
+  <div class="note">
+    <p style="margin:0 0 8px"><b>交了之后清泽怎么接</b></p>
+    <p style="margin:0 0 4px">· 一张 <code>360 × 570</code> 的底图（墙＋地＋框），存成 <code>bg.png</code> 放 <code>tiles/</code> 下</p>
+    <p style="margin:0 0 4px">· 清泽把 <code>house.html</code> 画墙画地那几段换成贴这张图</p>
+    <p style="margin:0 0 0">· 家具、门、人、小橘照旧，一对一地摆在上面，一点不影响</p>
+  </div>
+</div>
+
+<script>
+"use strict";
+const W = 360, H = 640, S = 2;          /* S = 显示放大几倍 */
+const WALL_Y = 150, BAR_Y = 570, FRAME_T = 15;
+const g = document.getElementById("g");
+const c = g.getContext("2d");
+c.imageSmoothingEnabled = false;
+
+function draw(annotate) {
+  c.setTransform(S, 0, 0, S, 0, 0);
+  c.clearRect(0, 0, W, H);
+  c.imageSmoothingEnabled = false;
+
+  /* 底子 */
+  c.fillStyle = "#e2d9c6"; c.fillRect(0, 0, W, WALL_Y);                 /* 墙 */
+  c.fillStyle = "#ad6a42"; c.fillRect(0, WALL_Y, W, BAR_Y - WALL_Y);    /* 地 */
+  c.fillStyle = "#d2c7ae"; c.fillRect(0, WALL_Y - 12, W, 12);           /* 护墙角 */
+  c.fillStyle = "#f2eee3";                                              /* 框 */
+  c.fillRect(0, 0, W, FRAME_T);
+  c.fillRect(0, BAR_Y - FRAME_T, W, FRAME_T);
+  c.fillRect(0, 0, FRAME_T, BAR_Y);
+  c.fillRect(W - FRAME_T, 0, FRAME_T, BAR_Y);
+  c.fillStyle = "#1c1a26"; c.fillRect(0, BAR_Y, W, H - BAR_Y);           /* 信息栏 */
+
+  if (!annotate) return;
+
+  /* 地板缝，示意 24 / 64 */
+  c.fillStyle = "rgba(92,52,32,.4)";
+  for (let y = WALL_Y + 24; y < BAR_Y; y += 24) c.fillRect(FRAME_T, y, W - FRAME_T * 2, 1);
+  let band = 0;
+  for (let y = WALL_Y; y < BAR_Y; y += 24, band++) {
+    const off = (band % 2) ? 32 : 0;
+    for (let x = FRAME_T + off; x < W - FRAME_T; x += 64) c.fillRect(x, y, 1, 24);
+  }
+
+  /* 32 的格线 */
+  c.fillStyle = "rgba(60,70,110,.22)";
+  for (let x = 0; x <= W; x += 32) c.fillRect(x, 0, 1, H);
+  for (let y = 0; y <= H; y += 32) c.fillRect(0, y, W, 1);
+
+  /* 分区虚线 */
+  c.save();
+  c.setLineDash([4, 4]);
+  c.strokeStyle = "rgba(40,70,140,.85)"; c.lineWidth = 1;
+  c.strokeRect(0.5, 0.5, W - 1, WALL_Y - 1);                    /* 墙 */
+  c.strokeRect(0.5, WALL_Y + 0.5, W - 1, BAR_Y - WALL_Y - 1);   /* 地 */
+  c.strokeStyle = "rgba(30,120,60,.85)";
+  c.strokeRect(21.5, 154.5, 318 - 1, 414 - 1);                  /* 可走区 */
+  c.restore();
+
+  /* 门位（3 门那组） */
+  [22, 150, 278].forEach((x, i) => {
+    c.fillStyle = "rgba(60,70,110,.20)"; c.fillRect(x, WALL_Y - 92, 60, 92);
+    c.strokeStyle = "rgba(40,70,140,.9)"; c.lineWidth = 1;
+    c.strokeRect(x + 0.5, WALL_Y - 91.5, 59, 91);
+    font(9, "#1b2a52", "center");
+    c.fillText("门" + (i + 1) + " x=" + x, x + 30, WALL_Y - 48);
+  });
+
+  /* 标注 */
+  font(10, "#33406b", "center");
+  c.fillText("墙　y 0–150", W / 2, 78);
+  c.fillText("地板　y 150–570", W / 2, 330);
+  c.fillText("信息栏　y 570–640（不用画）", W / 2, 605);
+  font(9, "#7a4a2e", "center");
+  c.fillText("护墙角 y 138–150", W / 2, 145);
+  font(9, "#2f6b46", "center");
+  c.fillText("人物可走范围  x 21–339 / y 154–568", W / 2, 180);
+
+  /* 四边框标注 */
+  font(9, "#5a5a7a", "center");
+  c.fillText("框 15", W / 2, 10);
+  c.save(); c.translate(8, 320); c.rotate(-Math.PI / 2);
+  c.fillText("框 15", 0, 0); c.restore();
+  c.save(); c.translate(W - 5, 320); c.rotate(-Math.PI / 2);
+  c.fillText("框 15", 0, 0); c.restore();
+  font(9, "#5a5a7a", "center");
+  c.fillText("框 15", W / 2, 562);
+
+  /* 角上写总尺寸 */
+  font(11, "#33406b", "center");
+  c.fillText("360 × 640", W / 2, 250);
+  font(9, "#5a5a7a", "center");
+  c.fillText("一格 32 × 32", W / 2, 268);
+  c.fillText("人物一格 32×32，显示 48×48", W / 2, 284);
+}
+
+function font(px, color, align) {
+  c.font = "600 " + px + "px -apple-system,PingFang SC,sans-serif";
+  c.fillStyle = color; c.textAlign = align || "left"; c.textBaseline = "middle";
+}
+
+function save(name, annotate) {
+  draw(annotate);
+  const a = document.createElement("a");
+  a.download = name;
+  a.href = g.toDataURL("image/png");
+  document.body.appendChild(a); a.click(); a.remove();
+  draw(true);
+}
+
+document.getElementById("save").addEventListener("click", () => save("house-guide.png", true));
+document.getElementById("clean").addEventListener("click", () => save("house-canvas-360x640.png", false));
+
+draw(true);
+</script>
+</body>
+</html>
