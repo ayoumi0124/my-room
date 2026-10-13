@@ -1,9 +1,9 @@
 {
   "_note": "宁宁在 editor.html 里摆的家。在编辑器里改完按「复制清单」，把内容贴到这里对应的房间下面，再拉到服务器，house.html 就会照着画。",
-  "_updated": "2026-10-13 13:05",
+  "_updated": "2026-10-13 14:25",
 
   "_top": "top:true = 这件东西画在所有大家具之后、人之前。摆在台面上、桌面上的小东西都得写 top:true，不然按「谁靠下谁压上面」会被台面吃掉。",
-  "_tint": "floorTint / wallTint 只给一个颜色，house.html 自己算深浅：墙上下差 11%，地板差 14%。护墙板跟着 wallTint 走（深一档）。",
+  "_tint": "floorTint / wallTint 只给一个颜色，house.html 自己算深浅：墙上下差 11%，地板差 14%。",
   "_wallsheet": "tiles/1_Interiors/32x32/Room_Bulder_subfiles_32x32/",
   "_sheets": {
     "walls":  "Room_Builder_Walls_32x32.png",
@@ -14,7 +14,7 @@
 
   "rooms": {
     "living": {
-      "wallTint": "#cfc3ab",
+      "wallTint": "#dcd2bc",
       "floorTint": "#ad6a42",
       "regions": [
         {
