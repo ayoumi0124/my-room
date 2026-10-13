@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#14131a">
-<title>我们家 · v4.9</title>
+<title>我们家 · v5.0</title>
 <style>
   html,body{margin:0;height:100%;background:#14131a;overflow:hidden;
     -webkit-user-select:none;user-select:none;touch-action:none;
@@ -18,17 +18,15 @@
 <script>
 "use strict";
 /* ============================================================
-   我们家 · v4.9
+   我们家 · v5.0
    沿革：v4.0 颜色 · v4.1 认 base.json · v4.2 落点/拆门 · v4.3 人最上
         v4.4 台面小物 · v4.5 把墙做厚 · v4.6 地板自己算深浅
-        v4.7 硬色带 + 四边墙体框 · v4.8 描线改深蓝紫、框加厚到 20
+        v4.7 硬色带 + 四边墙体框 · v4.8 描线深蓝紫 · v4.9 框 15 / 地板缝深棕
 
-   v4.9（2026-10-13 下午）宁宁对着参考图点的三件事：
-     · 框薄回去 —— 20 改成 15
-     · 地板的缝用**深棕**（前面统一成蓝紫统一过头了，地板这一块她要棕色）
-     · 木板分界线**再多一些** —— 横档 34 改 24，竖缝 96 改 64
-     · 顺带：护墙板不再固定是木头色，跟着墙的底色走（参考图里那道下线是墙本身的深一档）
-     · 配色：墙 米黄 #cfc3ab，地 赭红 #a96a45（写在 base.json 里）
+   v5.0（2026-10-13 下午）宁宁在截图上圈出护墙板那道，写了两个字：取消。
+     · 护墙板整道去掉 —— 就把 WAINSCOT_H 设成 0，改回一个数就能回来
+     · 墙和地交界处留一条 3 像素的深蓝紫踢脚线，不然墙脚是飘的
+     · 墙的底色调亮一档（写在 base.json：墙亮到 #dcd2bc）
 
    画法（从下往上）：
      墙 → 门 → 地板 → 区域砖 → 家具 → top小物 → 人 → 四方墙体框 → HUD
@@ -46,7 +44,7 @@ const SPEED = 118;
 const SPAWN = { x: 180, y: 260 };
 
 /* 墙上的软装 */
-const WAINSCOT_H = 34;
+const WAINSCOT_H = 0;          /* 护墙板高度。0 = 不要（宁宁 10-13 圈掉了） */
 const WINDOW_XS  = [90, 216];
 const LAMP_X     = 180;
 
@@ -55,7 +53,7 @@ const INK_HARD = "#221f33";
 const INK      = "#2f2b45";
 const INK_SOFT = "#403a5c";
 
-/* 地板的缝：深棕（宁宁点名要的） */
+/* 地板的缝：深棕 */
 const FLOOR_INK = "rgba(92,52,32,.55)";
 const PLANK_H = 24;
 const PLANK_W = 64;
@@ -67,7 +65,7 @@ const FRAME_MID = "#7a5c40";
 const FRAME_IN  = "#8f6c4a";
 const FRAME_HI  = "#b08c62";
 
-/* 色带：像素风靠硬边，不靠渐变 */
+/* 色带 */
 const BAND_WALL  = 10;
 const BAND_FLOOR = 12;
 
@@ -172,11 +170,11 @@ const ctx = cv.getContext("2d");
 ctx.imageSmoothingEnabled = false;
 
 const ROOMS = {
-  living:  { name:"客厅", wall:["#d6cdb6","#c6bda4"], floor:["#ab6d47","#945b3a"], line:FLOOR_INK, plank:true,
+  living:  { name:"客厅", wall:["#e2d9c6","#d1c5ab"], floor:["#ab6d47","#945b3a"], line:FLOOR_INK, plank:true,
              qz:{ x:170, y:330 }, cat:{ x:92, y:470 }, hideDoor:["kitchen"] },
-  study:   { name:"书房", wall:["#d6cdb6","#c6bda4"], floor:["#ab6d47","#945b3a"], line:FLOOR_INK, plank:true,
+  study:   { name:"书房", wall:["#e2d9c6","#d1c5ab"], floor:["#ab6d47","#945b3a"], line:FLOOR_INK, plank:true,
              qz:{ x:258, y:350 }, cat:{ x:300, y:470 }, hideDoor:[] },
-  kitchen: { name:"厨房", wall:["#dad1ba","#cabfa6"], floor:["#b07a52","#986340"], line:FLOOR_INK, plank:true,
+  kitchen: { name:"厨房", wall:["#e6ddca","#d5cab1"], floor:["#b07a52","#986340"], line:FLOOR_INK, plank:true,
              qz:{ x:96, y:340 }, cat:{ x:300, y:468 }, hideDoor:[] },
   garden:  { name:"花园", wall:["#d8e6c6","#c6d9b0"], floor:["#a8c98a","#8fb772"], line:"rgba(34,48,30,.34)", plank:false,
              qz:{ x:180, y:330 }, cat:{ x:108, y:456 }, hideDoor:[] }
@@ -256,7 +254,6 @@ function floorLine(id) {
   if (b && b.floorTint) return FLOOR_INK;
   return ROOMS[id].line;
 }
-/* 护墙板：跟着墙的底色走，就是墙自己深一档 —— 参考图里那道下线就是这么来的 */
 function wainscotColors(id) {
   const b = bgOf(id);
   if (b && b.wallTint) return [shade(b.wallTint, -0.08), shade(b.wallTint, -0.20)];
@@ -784,15 +781,20 @@ function drawWall() {
   for (const px of WINDOW_XS) drawWindow(px, 26, 54, 40);
   drawLamp(LAMP_X);
 
-  /* 护墙板：跟着墙的底色走 */
-  const wy = WALL_Y - WAINSCOT_H;
-  const wac = wainscotColors(cur);
-  bandFill(0, wy, W, WAINSCOT_H, wac[0], wac[1], 8);
-  ctx.fillStyle = shade(wac[0], 0.07); ctx.fillRect(0, wy, W, 3);
-  ctx.fillStyle = INK;      ctx.fillRect(0, wy + 5, W, 2);
-  ctx.fillStyle = INK_HARD; ctx.fillRect(0, WALL_Y - 4, W, 4);
-  ctx.fillStyle = "rgba(255,255,255,.10)";
-  for (let x = 24; x < W; x += 48) ctx.fillRect(x, wy + 10, 2, WAINSCOT_H - 16);
+  /* 护墙板：WAINSCOT_H 是 0 就不画（宁宁圈掉了）。改回一个数它就回来 */
+  if (WAINSCOT_H > 0) {
+    const wy = WALL_Y - WAINSCOT_H;
+    const wac = wainscotColors(cur);
+    bandFill(0, wy, W, WAINSCOT_H, wac[0], wac[1], 8);
+    ctx.fillStyle = shade(wac[0], 0.07); ctx.fillRect(0, wy, W, 3);
+    ctx.fillStyle = INK; ctx.fillRect(0, wy + 5, W, 2);
+    ctx.fillStyle = "rgba(255,255,255,.10)";
+    for (let x = 24; x < W; x += 48) ctx.fillRect(x, wy + 10, 2, WAINSCOT_H - 16);
+  }
+
+  /* 墙脚一条踢脚线：不然墙是飘的 */
+  ctx.fillStyle = INK_SOFT; ctx.fillRect(0, WALL_Y - 5, W, 3);
+  ctx.fillStyle = INK_HARD; ctx.fillRect(0, WALL_Y - 2, W, 2);
 }
 
 function drawFloor() {
