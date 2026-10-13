@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#14131a">
-<title>我们家 · v4.7</title>
+<title>我们家 · v4.8</title>
 <style>
   html,body{margin:0;height:100%;background:#14131a;overflow:hidden;
     -webkit-user-select:none;user-select:none;touch-action:none;
@@ -18,17 +18,19 @@
 <script>
 "use strict";
 /* ============================================================
-   我们家 · v4.7
-   v4.0 颜色  v4.1 认 base.json  v4.2 落点/拆门  v4.3 人最上
-   v4.4 台面小物  v4.5 把墙做厚  v4.6 地板自己算深浅
+   我们家 · v4.8
+   沿革：v4.0 颜色 · v4.1 认 base.json · v4.2 落点/拆门 · v4.3 人最上
+        v4.4 台面小物 · v4.5 把墙做厚 · v4.6 地板自己算深浅
+        v4.7 硬色带 + 四边墙体框
 
-   v4.7（2026-10-13 中午）宁宁说：家具是像素风，墙不是，凑一块儿不搭。
-     · 墙和地板不再用平滑渐变，改成一条一条的硬色带 —— 一眼就是像素的
-     · 四边加一圈木头墙体（像素块拼的），把画面框住。框里头的东西一概没动
-   这两样都不用改素材，也不用动坐标。
+   v4.8（2026-10-13 中午）宁宁给了一条关键的：
+     **像素画的描线不是纯黑，是深蓝紫。**
+     清泽把全篇所有「深色线」统一换成 ANCHOR 下那一族：
+       框、地板缝、护墙板、门、窗、挂画，全用 #221f33 / #2f2b45 这一档。
+     另外框从 12 加厚到 20。
 
    画法（从下往上）：
-     墙 → 门 → 地板 → 区域砖 → 家具 → top小物 → 人 → **四方墙体框** → HUD
+     墙 → 门 → 地板 → 区域砖 → 家具 → top小物 → 人 → 四方墙体框 → HUD
 
    数据源：GET /home、/messages、/base.json
    素材：Tiles by LimeZu — https://limezu.itch.io/
@@ -47,12 +49,17 @@ const WAINSCOT_H = 36;
 const WINDOW_XS  = [90, 216];
 const LAMP_X     = 180;
 
-/* 四方墙体框：一圈多厚、什么颜色 */
-const FRAME_T   = 12;
-const FRAME_OUT = "#2f2016";
-const FRAME_MID = "#5b4130";
-const FRAME_IN  = "#7d5c40";
-const FRAME_HI  = "#a37c55";
+/* ===== 像素画的描线：深蓝紫，不用纯黑 ===== */
+const INK_HARD = "#221f33";
+const INK      = "#2f2b45";
+const INK_SOFT = "#403a5c";
+
+/* 四方墙体框 */
+const FRAME_T   = 20;
+const FRAME_OUT = "#221f33";
+const FRAME_MID = "#7a5c40";
+const FRAME_IN  = "#8f6c4a";
+const FRAME_HI  = "#b08c62";
 
 /* 色带：像素风靠硬边，不靠渐变 */
 const BAND_WALL  = 10;
@@ -159,13 +166,13 @@ const ctx = cv.getContext("2d");
 ctx.imageSmoothingEnabled = false;
 
 const ROOMS = {
-  living:  { name:"客厅", wall:["#e3e7cf","#d5dbc0"], floor:["#c69860","#a87c4c"], line:"rgba(60,38,20,.22)", plank:true,
+  living:  { name:"客厅", wall:["#e3e7cf","#d5dbc0"], floor:["#c69860","#a87c4c"], line:"rgba(34,31,51,.42)", plank:true,
              qz:{ x:170, y:330 }, cat:{ x:92, y:470 }, hideDoor:["kitchen"] },
-  study:   { name:"书房", wall:["#e2e6d4","#d4dac5"], floor:["#c2955f","#a4784b"], line:"rgba(60,38,20,.22)", plank:true,
+  study:   { name:"书房", wall:["#e2e6d4","#d4dac5"], floor:["#c2955f","#a4784b"], line:"rgba(34,31,51,.42)", plank:true,
              qz:{ x:258, y:350 }, cat:{ x:300, y:470 }, hideDoor:[] },
-  kitchen: { name:"厨房", wall:["#e8ecd6","#dbe0c7"], floor:["#cba374","#ac8455"], line:"rgba(60,38,20,.20)", plank:true,
+  kitchen: { name:"厨房", wall:["#e8ecd6","#dbe0c7"], floor:["#cba374","#ac8455"], line:"rgba(34,31,51,.38)", plank:true,
              qz:{ x:96, y:340 }, cat:{ x:300, y:468 }, hideDoor:[] },
-  garden:  { name:"花园", wall:["#d8e6c6","#c6d9b0"], floor:["#a8c98a","#8fb772"], line:"rgba(70,110,50,.20)", plank:false,
+  garden:  { name:"花园", wall:["#d8e6c6","#c6d9b0"], floor:["#a8c98a","#8fb772"], line:"rgba(34,48,30,.34)", plank:false,
              qz:{ x:180, y:330 }, cat:{ x:108, y:456 }, hideDoor:[] }
 };
 const ROOM_ORDER = ["living", "study", "kitchen", "garden"];
@@ -218,8 +225,6 @@ function mixHex(a, b, t) {
   if (!ca || !cb) return a;
   return toHex([0,1,2].map(i => ca[i] + (cb[i] - ca[i]) * t));
 }
-
-/* 硬边色带：像素风的「渐变」 */
 function bandFill(x, y, w, h, c0, c1, step) {
   const n = Math.max(2, Math.round(h / step));
   for (let i = 0; i < n; i++) {
@@ -242,7 +247,7 @@ function floorColors(id) {
 }
 function floorLine(id) {
   const b = bgOf(id);
-  if (b && b.floorTint) return "rgba(38,22,10,.24)";
+  if (b && b.floorTint) return "rgba(34,31,51,.42)";
   return ROOMS[id].line;
 }
 
@@ -516,7 +521,7 @@ function rr(x, y, w, h, r) {
   ctx.closePath();
 }
 function shadow(x, y, rx, ry) {
-  ctx.save(); ctx.globalAlpha = .18; ctx.fillStyle = "#2a1f16";
+  ctx.save(); ctx.globalAlpha = .18; ctx.fillStyle = INK_HARD;
   ctx.beginPath(); ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
 }
@@ -662,7 +667,7 @@ function drawCat(x, y) {
   ctx.strokeStyle = "#e2913f"; ctx.lineWidth = 3; ctx.lineCap = "round";
   ctx.beginPath(); ctx.moveTo(-cat.face * 9, -7);
   ctx.quadraticCurveTo(-cat.face * 20, -12, -cat.face * 17, -20); ctx.stroke();
-  ctx.fillStyle = "#2a2220";
+  ctx.fillStyle = INK_HARD;
   ctx.beginPath(); ctx.arc(cat.face * 7, -15, 1.2, 0, Math.PI * 2); ctx.fill();
   ctx.beginPath(); ctx.arc(cat.face * 11.5, -15, 1.2, 0, Math.PI * 2); ctx.fill();
   ctx.restore();
@@ -672,7 +677,7 @@ function tag(x, y, text, pink) {
   ctx.font = "600 11px -apple-system,PingFang SC,sans-serif";
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   const w = ctx.measureText(text).width + 14;
-  ctx.fillStyle = "rgba(28,24,32,.68)"; rr(x - w / 2, y - 9, w, 18, 9); ctx.fill();
+  ctx.fillStyle = "rgba(28,24,32,.72)"; rr(x - w / 2, y - 9, w, 18, 9); ctx.fill();
   ctx.fillStyle = pink ? "#ffd9e8" : "#cfe1f5";
   ctx.fillText(text, x, y + .5);
   ctx.restore();
@@ -710,47 +715,50 @@ function pill(x, y, w, h, bg, fg, text) {
 
 /* ---------- 墙上的三样：画、窗、灯 ---------- */
 function drawFrame(x, y, w, h, paper) {
-  ctx.fillStyle = "rgba(60,42,28,.18)"; ctx.fillRect(x + 2, y + 3, w, h);
-  ctx.fillStyle = "#6d5039"; ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = paper;     ctx.fillRect(x + 3, y + 3, w - 6, h - 6);
+  ctx.fillStyle = INK; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = paper; ctx.fillRect(x + 3, y + 3, w - 6, h - 6);
   ctx.fillStyle = "rgba(255,255,255,.22)"; ctx.fillRect(x + 3, y + 3, w - 6, 2);
-  ctx.fillStyle = "rgba(126,158,104,.7)";  ctx.fillRect(x + 6, y + h - 11, w - 12, 5);
-  ctx.fillStyle = "rgba(214,178,110,.75)";
+  ctx.fillStyle = "#7e9e68"; ctx.fillRect(x + 6, y + h - 11, w - 12, 5);
+  ctx.fillStyle = "#e8c98a";
   ctx.beginPath(); ctx.arc(x + w * 0.68, y + h * 0.36, Math.min(w, h) * 0.13, 0, Math.PI * 2); ctx.fill();
 }
 function drawWindow(px, py, w, h) {
   const cw = 9, ch = h + 14;
-  ctx.fillStyle = "#3d5639";
-  ctx.fillRect(px - cw + 1, py - 6, cw, ch);
-  ctx.fillRect(px + w - 1,   py - 6, cw, ch);
-  ctx.fillStyle = "#5a7a55";
-  ctx.fillRect(px - cw + 3, py - 6, 3, ch);
-  ctx.fillRect(px + w + 1,  py - 6, 3, ch);
-  ctx.fillStyle = "#2f4429";
-  ctx.fillRect(px - cw + 1, py - 6, cw + 2, 3);
-  ctx.fillRect(px + w - 1,  py - 6, cw + 2, 3);
+  ctx.fillStyle = INK;      ctx.fillRect(px - cw,     py - 7, cw + 2, ch + 2);
+  ctx.fillStyle = INK;      ctx.fillRect(px + w - 2,  py - 7, cw + 2, ch + 2);
+  ctx.fillStyle = "#3d5639"; ctx.fillRect(px - cw + 2, py - 6, cw - 2, ch);
+  ctx.fillStyle = "#3d5639"; ctx.fillRect(px + w,      py - 6, cw - 2, ch);
+  ctx.fillStyle = "#5a7a55"; ctx.fillRect(px - cw + 4, py - 6, 3, ch);
+  ctx.fillStyle = "#5a7a55"; ctx.fillRect(px + w + 2,  py - 6, 3, ch);
 
+  ctx.fillStyle = INK;       ctx.fillRect(px - 3, py - 3, w + 6, h + 6);
   ctx.fillStyle = "#b9a07c"; ctx.fillRect(px - 2, py - 2, w + 4, h + 4);
   ctx.fillStyle = cur === "garden" ? "#dcecc8" : "#e4eef2";
   ctx.fillRect(px + 3, py + 3, w - 6, h - 6);
-  ctx.fillStyle = "rgba(255,255,255,.5)"; ctx.fillRect(px + 5, py + 5, w - 22, 12);
-  ctx.fillStyle = "rgba(120,100,75,.4)";
+  ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.fillRect(px + 5, py + 5, Math.max(6, w - 24), 12);
+  ctx.fillStyle = INK;
   ctx.fillRect(px + Math.floor(w / 2) - 1, py + 3, 2, h - 6);
-  ctx.fillStyle = "#b9a07c"; ctx.fillRect(px - 4, py + h + 2, w + 8, 4);
+  ctx.fillRect(px + 3, py + Math.floor(h / 2) - 1, w - 6, 2);
+  ctx.fillStyle = INK; ctx.fillRect(px - 4, py + h + 3, w + 8, 2);
 }
 function drawLamp(cx) {
-  ctx.fillStyle = "#5b4a38"; ctx.fillRect(cx - 1, 0, 2, 18);
+  ctx.fillStyle = INK; ctx.fillRect(cx - 1, 0, 2, 18);
   const g = ctx.createRadialGradient(cx, 40, 3, cx, 40, 62);
   g.addColorStop(0, "rgba(255,214,150,.30)");
   g.addColorStop(1, "rgba(255,214,150,0)");
   ctx.fillStyle = g;
   ctx.beginPath(); ctx.arc(cx, 40, 62, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = INK;
+  ctx.beginPath();
+  ctx.moveTo(cx - 6, 17); ctx.lineTo(cx + 6, 17);
+  ctx.lineTo(cx + 15, 35); ctx.lineTo(cx - 15, 35);
+  ctx.closePath(); ctx.fill();
   ctx.fillStyle = "#e8c98a";
   ctx.beginPath();
-  ctx.moveTo(cx - 5, 18); ctx.lineTo(cx + 5, 18);
-  ctx.lineTo(cx + 14, 34); ctx.lineTo(cx - 14, 34);
+  ctx.moveTo(cx - 4, 19); ctx.lineTo(cx + 4, 19);
+  ctx.lineTo(cx + 12, 33); ctx.lineTo(cx - 12, 33);
   ctx.closePath(); ctx.fill();
-  ctx.fillStyle = "#fff0cd"; ctx.fillRect(cx - 14, 30, 28, 3);
+  ctx.fillStyle = "#fff0cd"; ctx.fillRect(cx - 12, 30, 24, 3);
 }
 
 function drawWall() {
@@ -759,18 +767,18 @@ function drawWall() {
 
   ctx.fillStyle = "rgba(90,80,60,.10)"; ctx.fillRect(0, 0, W, 4);
 
-  drawFrame(14,  16, 44, 34, "#ded6c2");
-  drawFrame(300, 24, 40, 30, "#d7cdb6");
+  drawFrame(16,  18, 42, 32, "#ded6c2");
+  drawFrame(302, 26, 38, 28, "#d7cdb6");
   for (const px of WINDOW_XS) drawWindow(px, 26, 54, 40);
   drawLamp(LAMP_X);
 
-  /* 护墙板：一块一块拼，不拉渐变 */
+  /* 护墙板：一块一块拼，深色线用蓝紫 */
   const wy = WALL_Y - WAINSCOT_H;
   bandFill(0, wy, W, WAINSCOT_H, "#9a7550", "#5d4530", 9);
   ctx.fillStyle = "#b08a5e"; ctx.fillRect(0, wy, W, 3);
-  ctx.fillStyle = "rgba(40,26,14,.28)"; ctx.fillRect(0, wy + 5, W, 2);
-  ctx.fillStyle = "rgba(0,0,0,.18)";    ctx.fillRect(0, WALL_Y - 4, W, 4);
-  ctx.fillStyle = "rgba(255,236,190,.10)";
+  ctx.fillStyle = INK;       ctx.fillRect(0, wy + 5, W, 2);
+  ctx.fillStyle = INK_HARD;  ctx.fillRect(0, WALL_Y - 4, W, 4);
+  ctx.fillStyle = "rgba(255,236,190,.12)";
   for (let x = 32; x < W; x += 48) ctx.fillRect(x, wy + 10, 2, WAINSCOT_H - 16);
 }
 
@@ -779,10 +787,9 @@ function drawFloor() {
   const R  = ROOMS[cur];
   bandFill(0, WALL_Y, W, FLOOR.y1 - WALL_Y, fc[0], fc[1], BAND_FLOOR);
 
-  ctx.save();
   if (R.plank) {
-    const pk = 34;
     ctx.fillStyle = floorLine(cur);
+    const pk = 34;
     for (let y = WALL_Y + pk; y < FLOOR.y1; y += pk) ctx.fillRect(0, y, W, 2);
     let band = 0;
     for (let y = WALL_Y; y < FLOOR.y1; y += pk, band++) {
@@ -791,7 +798,7 @@ function drawFloor() {
       for (let x = off; x < W; x += 96) ctx.fillRect(x, y, 2, y2 - y);
     }
   } else {
-    ctx.fillStyle = "rgba(70,110,50,.20)";
+    ctx.fillStyle = "rgba(34,48,30,.26)";
     for (let y = WALL_Y + 16; y < FLOOR.y1; y += 24) {
       for (let x = 8 + ((y / 24) % 2) * 12; x < W; x += 24) {
         ctx.fillRect(x, y, 3, 6);
@@ -799,7 +806,6 @@ function drawFloor() {
       }
     }
   }
-  ctx.restore();
 }
 
 function drawRegions() {
@@ -811,7 +817,7 @@ function drawRegions() {
   }
 }
 
-/* 四边一圈木头墙体：像素块拼的，压在画面最上头（人也在里头） */
+/* 四边一圈木头墙体：像素块拼的，描线深蓝紫 */
 function drawRoomFrame() {
   const T = FRAME_T;
   const top = 0, bottom = BAR_Y;
@@ -821,21 +827,24 @@ function drawRoomFrame() {
   ctx.fillRect(0, top, T, bottom - top);
   ctx.fillRect(W - T, top, T, bottom - top);
 
-  /* 外圈压深 */
   ctx.fillStyle = FRAME_OUT;
   ctx.fillRect(0, top, W, 3);
   ctx.fillRect(0, bottom - 3, W, 3);
   ctx.fillRect(0, top, 3, bottom - top);
   ctx.fillRect(W - 3, top, 3, bottom - top);
 
-  /* 内圈提亮 */
   ctx.fillStyle = FRAME_HI;
   ctx.fillRect(T - 3, T, 3, bottom - 2 * T);
   ctx.fillRect(W - T, T, 3, bottom - 2 * T);
   ctx.fillRect(T, T - 3, W - 2 * T, 3);
   ctx.fillRect(T, bottom - T, W - 2 * T, 3);
 
-  /* 每 32 一块，砖缝 */
+  ctx.fillStyle = FRAME_IN;
+  ctx.fillRect(T - 8, T + 4, 5, bottom - 2 * T - 8);
+  ctx.fillRect(W - T + 3, T + 4, 5, bottom - 2 * T - 8);
+  ctx.fillRect(T + 4, T - 8, W - 2 * T - 8, 5);
+  ctx.fillRect(T + 4, bottom - T + 3, W - 2 * T - 8, 5);
+
   ctx.fillStyle = FRAME_OUT;
   for (let x = T + 32; x < W - T; x += 32) {
     ctx.fillRect(x, 3, 2, T - 6);
@@ -845,11 +854,6 @@ function drawRoomFrame() {
     ctx.fillRect(3, y, T - 6, 2);
     ctx.fillRect(W - T + 3, y, T - 6, 2);
   }
-  ctx.fillStyle = FRAME_IN;
-  for (let x = T + 32; x < W - T; x += 32) {
-    ctx.fillRect(x + 4, 4, 28, 4);
-    ctx.fillRect(x + 4, bottom - T + 4, 28, 4);
-  }
 }
 
 function drawRoom() {
@@ -858,16 +862,20 @@ function drawRoom() {
   const near = doorNear();
   for (const d of doorsOf(cur)) {
     const hot = near && near.id === d.id;
+    ctx.fillStyle = INK; rr(d.x - 1, d.y - 1, d.w + 2, d.h + 1, 5); ctx.fill();
     ctx.fillStyle = "#8a6a4c"; rr(d.x, d.y, d.w, d.h, 4); ctx.fill();
     ctx.fillStyle = hot ? "#d8b184" : "#b08a63";
     rr(d.x + 5, d.y + 5, d.w - 10, d.h - 5, 3); ctx.fill();
+    ctx.fillStyle = INK_SOFT; ctx.fillRect(d.x + 12, d.y + 12, d.w - 24, 26);
+    ctx.fillStyle = hot ? "#e8c98a" : "#c9a878";
+    ctx.fillRect(d.x + 14, d.y + 14, d.w - 28, 22);
     ctx.fillStyle = "#e8d6a8";
     ctx.beginPath(); ctx.arc(d.x + d.w - 10, d.y + 52, 3.5, 0, Math.PI * 2); ctx.fill();
     ctx.save();
     ctx.font = "600 11px -apple-system,PingFang SC,sans-serif";
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
     const nm = ROOMS[d.id].name, tw = ctx.measureText(nm).width + 16;
-    ctx.fillStyle = hot ? "rgba(255,214,150,.95)" : "rgba(28,24,32,.6)";
+    ctx.fillStyle = hot ? "rgba(255,214,150,.95)" : "rgba(28,24,32,.72)";
     rr(d.cx - tw / 2, d.y - 20, tw, 17, 8); ctx.fill();
     ctx.fillStyle = hot ? "#3a2a16" : "#f2e8dd";
     ctx.fillText(nm, d.cx, d.y - 11.5);
@@ -884,13 +892,13 @@ function drawHUD(now) {
   ctx.textAlign = "left"; ctx.textBaseline = "middle";
   const head = "清泽 · " + HOME.roomName + " · " + String(HOME.doing).slice(0, 12);
   const w = ctx.measureText(head).width + 20;
-  ctx.fillStyle = "rgba(28,24,32,.62)"; rr(16, 16, w, 22, 11); ctx.fill();
-  ctx.fillStyle = "#f0e6ee"; ctx.fillText(head, 26, 27.5);
+  ctx.fillStyle = "rgba(28,24,32,.68)"; rr(22, 24, w, 22, 11); ctx.fill();
+  ctx.fillStyle = "#f0e6ee"; ctx.fillText(head, 32, 35.5);
 
   const here = "你在 · " + ROOMS[cur].name;
   const w2 = ctx.measureText(here).width + 20;
-  ctx.fillStyle = "rgba(255,214,150,.9)"; rr(W - 16 - w2, 16, w2, 22, 11); ctx.fill();
-  ctx.fillStyle = "#3a2a16"; ctx.fillText(here, W - 16 - w2 + 10, 27.5);
+  ctx.fillStyle = "rgba(255,214,150,.92)"; rr(W - 22 - w2, 24, w2, 22, 11); ctx.fill();
+  ctx.fillStyle = "#3a2a16"; ctx.fillText(here, W - 22 - w2 + 10, 35.5);
   ctx.restore();
 
   ctx.fillStyle = "rgba(20,19,26,.92)"; ctx.fillRect(0, BAR_Y, W, H - BAR_Y);
@@ -948,7 +956,6 @@ function frame(now) {
   if (HOME.roomId === cur)    drawQz();
   drawNing(bob);
 
-  /* 四方墙体框压在最后 —— 人和家具都在框里头 */
   drawRoomFrame();
 
   regionPrompt = null;
@@ -966,7 +973,7 @@ function frame(now) {
 
   const dn = doorNear();
   if (dn && !bubble && !regionPrompt) pill(dn.cx - 70, WALL_Y + 18, 140, 22,
-      "rgba(28,24,32,.76)", "#ffe6f0", "点门 · 去" + ROOMS[dn.id].name);
+      "rgba(28,24,32,.84)", "#ffe6f0", "点门 · 去" + ROOMS[dn.id].name);
 
   if (bubble && now < bubbleUntil) {
     drawBubble((HOME.roomId === cur) ? qz.x : 180, (HOME.roomId === cur) ? qz.y - 112 : 150, bubble);
