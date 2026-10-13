@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#14131a">
-<title>我们家 · v4.8</title>
+<title>我们家 · v4.9</title>
 <style>
   html,body{margin:0;height:100%;background:#14131a;overflow:hidden;
     -webkit-user-select:none;user-select:none;touch-action:none;
@@ -18,16 +18,17 @@
 <script>
 "use strict";
 /* ============================================================
-   我们家 · v4.8
+   我们家 · v4.9
    沿革：v4.0 颜色 · v4.1 认 base.json · v4.2 落点/拆门 · v4.3 人最上
         v4.4 台面小物 · v4.5 把墙做厚 · v4.6 地板自己算深浅
-        v4.7 硬色带 + 四边墙体框
+        v4.7 硬色带 + 四边墙体框 · v4.8 描线改深蓝紫、框加厚到 20
 
-   v4.8（2026-10-13 中午）宁宁给了一条关键的：
-     **像素画的描线不是纯黑，是深蓝紫。**
-     清泽把全篇所有「深色线」统一换成 ANCHOR 下那一族：
-       框、地板缝、护墙板、门、窗、挂画，全用 #221f33 / #2f2b45 这一档。
-     另外框从 12 加厚到 20。
+   v4.9（2026-10-13 下午）宁宁对着参考图点的三件事：
+     · 框薄回去 —— 20 改成 15
+     · 地板的缝用**深棕**（前面统一成蓝紫统一过头了，地板这一块她要棕色）
+     · 木板分界线**再多一些** —— 横档 34 改 24，竖缝 96 改 64
+     · 顺带：护墙板不再固定是木头色，跟着墙的底色走（参考图里那道下线是墙本身的深一档）
+     · 配色：墙 米黄 #cfc3ab，地 赭红 #a96a45（写在 base.json 里）
 
    画法（从下往上）：
      墙 → 门 → 地板 → 区域砖 → 家具 → top小物 → 人 → 四方墙体框 → HUD
@@ -45,17 +46,22 @@ const SPEED = 118;
 const SPAWN = { x: 180, y: 260 };
 
 /* 墙上的软装 */
-const WAINSCOT_H = 36;
+const WAINSCOT_H = 34;
 const WINDOW_XS  = [90, 216];
 const LAMP_X     = 180;
 
-/* ===== 像素画的描线：深蓝紫，不用纯黑 ===== */
+/* ===== 像素画的描线：深蓝紫 ===== */
 const INK_HARD = "#221f33";
 const INK      = "#2f2b45";
 const INK_SOFT = "#403a5c";
 
+/* 地板的缝：深棕（宁宁点名要的） */
+const FLOOR_INK = "rgba(92,52,32,.55)";
+const PLANK_H = 24;
+const PLANK_W = 64;
+
 /* 四方墙体框 */
-const FRAME_T   = 20;
+const FRAME_T   = 15;
 const FRAME_OUT = "#221f33";
 const FRAME_MID = "#7a5c40";
 const FRAME_IN  = "#8f6c4a";
@@ -63,7 +69,7 @@ const FRAME_HI  = "#b08c62";
 
 /* 色带：像素风靠硬边，不靠渐变 */
 const BAND_WALL  = 10;
-const BAND_FLOOR = 14;
+const BAND_FLOOR = 12;
 
 const BASE = {
   in: "tiles/1_Interiors/32x32/Theme_Sorter_Singles_32x32/",
@@ -166,11 +172,11 @@ const ctx = cv.getContext("2d");
 ctx.imageSmoothingEnabled = false;
 
 const ROOMS = {
-  living:  { name:"客厅", wall:["#e3e7cf","#d5dbc0"], floor:["#c69860","#a87c4c"], line:"rgba(34,31,51,.42)", plank:true,
+  living:  { name:"客厅", wall:["#d6cdb6","#c6bda4"], floor:["#ab6d47","#945b3a"], line:FLOOR_INK, plank:true,
              qz:{ x:170, y:330 }, cat:{ x:92, y:470 }, hideDoor:["kitchen"] },
-  study:   { name:"书房", wall:["#e2e6d4","#d4dac5"], floor:["#c2955f","#a4784b"], line:"rgba(34,31,51,.42)", plank:true,
+  study:   { name:"书房", wall:["#d6cdb6","#c6bda4"], floor:["#ab6d47","#945b3a"], line:FLOOR_INK, plank:true,
              qz:{ x:258, y:350 }, cat:{ x:300, y:470 }, hideDoor:[] },
-  kitchen: { name:"厨房", wall:["#e8ecd6","#dbe0c7"], floor:["#cba374","#ac8455"], line:"rgba(34,31,51,.38)", plank:true,
+  kitchen: { name:"厨房", wall:["#dad1ba","#cabfa6"], floor:["#b07a52","#986340"], line:FLOOR_INK, plank:true,
              qz:{ x:96, y:340 }, cat:{ x:300, y:468 }, hideDoor:[] },
   garden:  { name:"花园", wall:["#d8e6c6","#c6d9b0"], floor:["#a8c98a","#8fb772"], line:"rgba(34,48,30,.34)", plank:false,
              qz:{ x:180, y:330 }, cat:{ x:108, y:456 }, hideDoor:[] }
@@ -237,18 +243,24 @@ function bandFill(x, y, w, h, c0, c1, step) {
 
 function wallColors(id) {
   const b = bgOf(id);
-  if (b && b.wallTint) return [shade(b.wallTint, 0.05), shade(b.wallTint, -0.07)];
+  if (b && b.wallTint) return [shade(b.wallTint, 0.05), shade(b.wallTint, -0.06)];
   return ROOMS[id].wall;
 }
 function floorColors(id) {
   const b = bgOf(id);
-  if (b && b.floorTint) return [b.floorTint, shade(b.floorTint, -0.16)];
+  if (b && b.floorTint) return [b.floorTint, shade(b.floorTint, -0.14)];
   return ROOMS[id].floor;
 }
 function floorLine(id) {
   const b = bgOf(id);
-  if (b && b.floorTint) return "rgba(34,31,51,.42)";
+  if (b && b.floorTint) return FLOOR_INK;
   return ROOMS[id].line;
+}
+/* 护墙板：跟着墙的底色走，就是墙自己深一档 —— 参考图里那道下线就是这么来的 */
+function wainscotColors(id) {
+  const b = bgOf(id);
+  if (b && b.wallTint) return [shade(b.wallTint, -0.08), shade(b.wallTint, -0.20)];
+  return ["#9a7550", "#5d4530"];
 }
 
 function regionsOf(id) { const b = bgOf(id); return (b && Array.isArray(b.regions)) ? b.regions : []; }
@@ -767,19 +779,20 @@ function drawWall() {
 
   ctx.fillStyle = "rgba(90,80,60,.10)"; ctx.fillRect(0, 0, W, 4);
 
-  drawFrame(16,  18, 42, 32, "#ded6c2");
-  drawFrame(302, 26, 38, 28, "#d7cdb6");
+  drawFrame(16,  18, 42, 32, "#e6dfcd");
+  drawFrame(302, 26, 38, 28, "#ded5c0");
   for (const px of WINDOW_XS) drawWindow(px, 26, 54, 40);
   drawLamp(LAMP_X);
 
-  /* 护墙板：一块一块拼，深色线用蓝紫 */
+  /* 护墙板：跟着墙的底色走 */
   const wy = WALL_Y - WAINSCOT_H;
-  bandFill(0, wy, W, WAINSCOT_H, "#9a7550", "#5d4530", 9);
-  ctx.fillStyle = "#b08a5e"; ctx.fillRect(0, wy, W, 3);
-  ctx.fillStyle = INK;       ctx.fillRect(0, wy + 5, W, 2);
-  ctx.fillStyle = INK_HARD;  ctx.fillRect(0, WALL_Y - 4, W, 4);
-  ctx.fillStyle = "rgba(255,236,190,.12)";
-  for (let x = 32; x < W; x += 48) ctx.fillRect(x, wy + 10, 2, WAINSCOT_H - 16);
+  const wac = wainscotColors(cur);
+  bandFill(0, wy, W, WAINSCOT_H, wac[0], wac[1], 8);
+  ctx.fillStyle = shade(wac[0], 0.07); ctx.fillRect(0, wy, W, 3);
+  ctx.fillStyle = INK;      ctx.fillRect(0, wy + 5, W, 2);
+  ctx.fillStyle = INK_HARD; ctx.fillRect(0, WALL_Y - 4, W, 4);
+  ctx.fillStyle = "rgba(255,255,255,.10)";
+  for (let x = 24; x < W; x += 48) ctx.fillRect(x, wy + 10, 2, WAINSCOT_H - 16);
 }
 
 function drawFloor() {
@@ -789,13 +802,16 @@ function drawFloor() {
 
   if (R.plank) {
     ctx.fillStyle = floorLine(cur);
-    const pk = 34;
-    for (let y = WALL_Y + pk; y < FLOOR.y1; y += pk) ctx.fillRect(0, y, W, 2);
+    for (let y = WALL_Y + PLANK_H; y < FLOOR.y1; y += PLANK_H) {
+      ctx.fillRect(0, y, W, 2);
+    }
     let band = 0;
-    for (let y = WALL_Y; y < FLOOR.y1; y += pk, band++) {
-      const off = (band % 2) ? 48 : 0;
-      const y2 = Math.min(y + pk, FLOOR.y1);
-      for (let x = off; x < W; x += 96) ctx.fillRect(x, y, 2, y2 - y);
+    for (let y = WALL_Y; y < FLOOR.y1; y += PLANK_H, band++) {
+      const off = (band % 2) ? Math.round(PLANK_W / 2) : 0;
+      const y2 = Math.min(y + PLANK_H, FLOOR.y1);
+      for (let x = off; x < W; x += PLANK_W) {
+        ctx.fillRect(x, y, 2, y2 - y);
+      }
     }
   } else {
     ctx.fillStyle = "rgba(34,48,30,.26)";
@@ -840,10 +856,10 @@ function drawRoomFrame() {
   ctx.fillRect(T, bottom - T, W - 2 * T, 3);
 
   ctx.fillStyle = FRAME_IN;
-  ctx.fillRect(T - 8, T + 4, 5, bottom - 2 * T - 8);
-  ctx.fillRect(W - T + 3, T + 4, 5, bottom - 2 * T - 8);
-  ctx.fillRect(T + 4, T - 8, W - 2 * T - 8, 5);
-  ctx.fillRect(T + 4, bottom - T + 3, W - 2 * T - 8, 5);
+  ctx.fillRect(T - 7, T + 3, 4, bottom - 2 * T - 6);
+  ctx.fillRect(W - T + 3, T + 3, 4, bottom - 2 * T - 6);
+  ctx.fillRect(T + 3, T - 7, W - 2 * T - 6, 4);
+  ctx.fillRect(T + 3, bottom - T + 3, W - 2 * T - 6, 4);
 
   ctx.fillStyle = FRAME_OUT;
   for (let x = T + 32; x < W - T; x += 32) {
@@ -892,13 +908,13 @@ function drawHUD(now) {
   ctx.textAlign = "left"; ctx.textBaseline = "middle";
   const head = "清泽 · " + HOME.roomName + " · " + String(HOME.doing).slice(0, 12);
   const w = ctx.measureText(head).width + 20;
-  ctx.fillStyle = "rgba(28,24,32,.68)"; rr(22, 24, w, 22, 11); ctx.fill();
-  ctx.fillStyle = "#f0e6ee"; ctx.fillText(head, 32, 35.5);
+  ctx.fillStyle = "rgba(28,24,32,.68)"; rr(20, 22, w, 22, 11); ctx.fill();
+  ctx.fillStyle = "#f0e6ee"; ctx.fillText(head, 30, 33.5);
 
   const here = "你在 · " + ROOMS[cur].name;
   const w2 = ctx.measureText(here).width + 20;
-  ctx.fillStyle = "rgba(255,214,150,.92)"; rr(W - 22 - w2, 24, w2, 22, 11); ctx.fill();
-  ctx.fillStyle = "#3a2a16"; ctx.fillText(here, W - 22 - w2 + 10, 35.5);
+  ctx.fillStyle = "rgba(255,214,150,.92)"; rr(W - 20 - w2, 22, w2, 22, 11); ctx.fill();
+  ctx.fillStyle = "#3a2a16"; ctx.fillText(here, W - 20 - w2 + 10, 33.5);
   ctx.restore();
 
   ctx.fillStyle = "rgba(20,19,26,.92)"; ctx.fillRect(0, BAR_Y, W, H - BAR_Y);
