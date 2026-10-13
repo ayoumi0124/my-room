@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="theme-color" content="#14131a">
-<title>我们家 · v5.1</title>
+<title>我们家 · v5.2</title>
 <style>
   html,body{margin:0;height:100%;background:#14131a;overflow:hidden;
     -webkit-user-select:none;user-select:none;touch-action:none;
@@ -18,17 +18,19 @@
 <script>
 "use strict";
 /* ============================================================
-   我们家 · v5.1
+   我们家 · v5.2
    沿革：v4.0 颜色 · v4.1 认 base.json · v4.2 落点/拆门 · v4.3 人最上
         v4.4 台面小物 · v4.5 把墙做厚 · v4.6 地板自算深浅
         v4.7 硬色带 + 四方框 · v4.8 描线深蓝紫 · v4.9 框 15 / 地板缝深棕
-        v5.0 护墙板取消（宁宁圈掉的）
+        v5.0 护墙板取消 · v5.1 护墙板白回来（奶白，12）
 
-   v5.1（2026-10-13 下午）宁宁说：不不不，护墙板要**白色**的，厚 **12**。
-     · 护墙板回来，WAINSCOT_H = 12
-     · 颜色改成奶白 —— 不再是跟着墙走的深一档
-     · 上下各压一条深蓝紫的线，白板才不会糊在墙上
-     · 改回棕色/取消：只要动 WAINSCOT_H 和 WAINSCOT_C0 / C1 这几个数
+   v5.2（2026-10-13 下午）宁宁说「没变化」。
+     因为奶白 #f6f2e8 跟墙的米黄 #dcd2bc 离得太近，12 像素又矮，看着像没有。
+     处理：
+       · 护墙板改**纯白** #ffffff → #ece7dc
+       · 上沿那条线加粗到 3 像素，压得重一点
+       · 板面加一点高光，白板才有厚度
+     还是看不见 → 就把 WAINSCOT_H 加大（报个数给清泽）。
 
    画法：墙 → 门 → 地板 → 区域砖 → 家具 → top小物 → 人 → 四方墙体框 → HUD
    数据源：GET /home、/messages、/base.json
@@ -43,10 +45,10 @@ const LIVING_ID = "living";
 const SPEED = 118;
 const SPAWN = { x: 180, y: 260 };
 
-/* 护墙板：0 = 不画。宁宁要白色、厚 12 */
+/* 护墙板：0 = 不画。纯白，厚 12 */
 const WAINSCOT_H  = 12;
-const WAINSCOT_C0 = "#f6f2e8";
-const WAINSCOT_C1 = "#ded8c9";
+const WAINSCOT_C0 = "#ffffff";
+const WAINSCOT_C1 = "#e7e1d4";
 
 const WINDOW_XS = [90, 216];
 const LAMP_X    = 180;
@@ -779,15 +781,15 @@ function drawWall() {
   for (const px of WINDOW_XS) drawWindow(px, 26, 54, 40);
   drawLamp(LAMP_X);
 
-  /* 护墙板：白色的，厚 WAINSCOT_H。上下各压一条深线，白板才不会糊在墙上 */
+  /* 护墙板：纯白的一道，厚 WAINSCOT_H。上沿一条深线压住，白板才立得起来 */
   if (WAINSCOT_H > 0) {
     const wy = WALL_Y - WAINSCOT_H;
-    bandFill(0, wy + 2, W, WAINSCOT_H - 4, WAINSCOT_C0, WAINSCOT_C1, 6);
-    ctx.fillStyle = "rgba(255,255,255,.55)"; ctx.fillRect(0, wy + 2, W, 2);
-    ctx.fillStyle = INK; ctx.fillRect(0, wy, W, 2);
-    ctx.fillStyle = INK; ctx.fillRect(0, WALL_Y - 2, W, 2);
-    ctx.fillStyle = "rgba(255,255,255,.28)";
-    for (let x = 24; x < W; x += 48) ctx.fillRect(x, wy + 4, 2, Math.max(0, WAINSCOT_H - 10));
+    ctx.fillStyle = WAINSCOT_C1; ctx.fillRect(0, wy, W, WAINSCOT_H);
+    ctx.fillStyle = WAINSCOT_C0; ctx.fillRect(0, wy + 3, W, Math.max(0, WAINSCOT_H - 6));
+    ctx.fillStyle = "rgba(255,255,255,.9)"; ctx.fillRect(0, wy + 3, W, 2);
+    ctx.fillStyle = INK; ctx.fillRect(0, wy, W, 3);
+    ctx.fillStyle = "rgba(255,255,255,.30)";
+    for (let x = 24; x < W; x += 48) ctx.fillRect(x, wy + 5, 2, Math.max(0, WAINSCOT_H - 10));
   }
 }
 
