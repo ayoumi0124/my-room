@@ -1,0 +1,52 @@
+{
+  "_note": "【2026-10-17 凌晨的存档】宁宁说家具也都不好看，要整套重画 —— 清泽清家具之前先把这一份原样存下来。这一份是清空之前、10-13 14:25 那一版的 base.json。她说一声「退回去」，把这份贴回 base.json 就能回来。",
+  "_archived_from": "static/base.json",
+  "_archived_sha": "f81ca573b1651a43ef3e370edff47cd823229c70",
+  "_archived_at": "2026-10-17 01:25",
+
+  "_top": "top:true = 这件东西画在所有大家具之后、人之前。摆在台面上、桌面上的小东西都得写 top:true，不然按「谁靠下谁压上面」会被台面吃掉。",
+  "_tint": "floorTint / wallTint 只给一个颜色，house.html 自己算深浅：墙上下差 11%，地板差 14%。",
+  "_wallsheet": "tiles/1_Interiors/32x32/Room_Bulder_subfiles_32x32/",
+  "_sheets": {
+    "walls":  "Room_Builder_Walls_32x32.png",
+    "floors": "Room_Builder_Floors_32x32.png",
+    "shadow": "Room_Builder_Floor_Shadows_32x32.png",
+    "base":   "Room_Builder_baseboards_32x32.png"
+  },
+
+  "rooms": {
+    "living": {
+      "wallTint": "#dcd2bc",
+      "floorTint": "#ad6a42",
+      "regions": [
+        {
+          "name": "厨房",
+          "x": 0, "y": 415, "w": 188, "h": 155,
+          "floor": { "s": "floors", "c": 5, "r": 20, "lc": 1, "lr": 1, "clean": true }
+        }
+      ],
+      "items": [
+        { "c": "kitchen", "n": 122, "x": -10, "y": 423, "w": 136, "h": 90 },
+        { "c": "kitchen", "n": 142, "x": 52,  "y": 336, "w": 69,  "h": 90, "top": true },
+        { "c": "kitchen", "n": 151, "x": 121, "y": 388, "w": 44,  "h": 90 },
+        { "c": "kitchen", "n": 166, "x": 162, "y": 411, "w": 44,  "h": 90 },
+        { "c": "kitchen", "n": 199, "x": 4,   "y": 370, "w": 22,  "h": 90, "top": true },
+        { "c": "kitchen", "n": 200, "x": 22,  "y": 370, "w": 22,  "h": 90, "top": true },
+        { "c": "kitchen", "n": 208, "x": 7,   "y": 335, "w": 55,  "h": 90, "top": true },
+        { "c": "kitchen", "n": 212, "x": 14,  "y": 334, "w": 31,  "h": 90, "top": true },
+        { "c": "kitchen", "n": 343, "x": 244, "y": 456, "w": 69,  "h": 90 },
+        { "c": "kitchen", "n": 372, "x": 195, "y": 429, "w": 49,  "h": 90, "top": true },
+        { "c": "kitchen", "n": 390, "x": 124, "y": 345, "w": 39,  "h": 90, "top": true },
+        { "c": "kitchen", "n": 376, "x": 168, "y": 400, "w": 28,  "h": 90, "top": true },
+        { "c": "kitchen", "n": 368, "x": 313, "y": 429, "w": 49,  "h": 90 },
+        { "c": "kitchen", "n": 386, "x": 247, "y": 373, "w": 31,  "h": 90, "top": true },
+        { "c": "kitchen", "n": 387, "x": 281, "y": 374, "w": 31,  "h": 90, "top": true },
+        { "c": "kitchen", "n": 394, "x": 280, "y": 354, "w": 28,  "h": 90, "top": true },
+        { "c": "kitchen", "n": 394, "x": 253, "y": 396, "w": 31,  "h": 90, "top": true },
+        { "c": "living",  "n": 66,  "x": 166, "y": 457, "w": 31,  "h": 90 },
+        { "c": "bedroom", "n": 360, "x": 9,   "y": 468, "w": 49,  "h": 90 },
+        { "c": "bedroom", "n": 362, "x": 58,  "y": 468, "w": 49,  "h": 90 }
+      ]
+    }
+  }
+}
