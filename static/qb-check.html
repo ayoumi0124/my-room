@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>qb.png · 1:1 对照板</title>
+<style>
+  html,body{margin:0;background:#14131a;color:#e8e2d4;
+    font:14px/1.5 -apple-system,system-ui,"PingFang SC",sans-serif}
+  .wrap{padding:14px;max-width:520px;margin:0 auto}
+  h1{font-size:15px;font-weight:600;margin:0 0 3px}
+  .sub{color:#8f8878;font-size:12px;margin-bottom:12px}
+  .bar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap}
+  button{background:#232231;color:#e8e2d4;border:1px solid #3a3849;
+    border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer}
+  button.on{background:#4a6d99;border-color:#4a6d99}
+  .stage{overflow:auto;background:#0c0b11;border:1px solid #3a3849;border-radius:6px}
+  .inner{position:relative;width:360px;height:570px;transform-origin:0 0}
+  .inner img{display:block;width:360px;height:570px;image-rendering:pixelated}
+  .inner svg{position:absolute;left:0;top:0;pointer-events:none}
+  .foot{color:#8f8878;font-size:12px;margin-top:10px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>qb.png · 1:1 对照板</h1>
+  <div class="sub">360 × 570 ·一格 32px · 墙/地分界 y=150</div>
+
+  <div class="bar">
+    <button id="z1" class="on">1:1</button>
+    <button id="z2">2×</button>
+    <button id="z3">4×</button>
+    <button id="g1">网格</button>
+    <button id="g2">参考线</button>
+  </div>
+
+  <div class="stage">
+    <div class="inner" id="inner">
+      <img src="tiles/qb.png" alt="qb.png">
+      <svg id="ov" width="360" height="570" viewBox="0 0 360 570">
+        <g id="grid" stroke="#4a6d99" stroke-width=".4" opacity=".5" style="display:none"></g>
+        <g id="guides" style="display:none">
+          <line x1="0" y1="150" x2="360" y2="150" stroke="#ff5f7a" stroke-width="1"/>
+          <line x1="0" y1="138" x2="360" y2="138" stroke="#ffd166"
+                stroke-width="1" stroke-dasharray="5 3"/>
+          <rect x=".5" y=".5" width="359" height="569" fill="none"
+                stroke="#7dd3a0" stroke-width="1"/>
+        </g>
+      </svg>
+    </div>
+  </div>
+
+  <div class="foot">
+    红＝墙地分界 y150　黄＝护墙角顶 y138　绿＝四边框内沿（厚 15）
+  </div>
+</div>
+
+<script>
+const inner = document.getElementById('inner');
+const grid  = document.getElementById('grid');
+const guides= document.getElementById('guides');
+const bz = [document.getElementById('z1'),document.getElementById('z2'),document.getElementById('z3')];
+const bg = [document.getElementById('g1'),document.getElementById('g2')];
+
+// 生成 32px 网格
+const NS='http://www.w3.org/2000/svg';
+for (let x = 32; x < 360; x += 32) {
+  const l = document.createElementNS(NS,'line');
+  l.setAttribute('x1',x); l.setAttribute('y1',0);
+  l.setAttribute('x2',x); l.setAttribute('y2',570);
+  grid.appendChild(l);
+}
+for (let y = 32; y < 570; y += 32) {
+  const l = document.createElementNS(NS,'line');
+  l.setAttribute('x1',0); l.setAttribute('y1',y);
+  l.setAttribute('x2',360); l.setAttribute('y2',y);
+  grid.appendChild(l);
+}
+
+// 缩放
+const zooms = [1, 2, 4];
+bz.forEach((b, i) => b.addEventListener('click', () => {
+  bz.forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  inner.style.transform = 'scale(' + zooms[i] + ')';
+  // 让滚动容器跟着变大
+  inner.parentNode.style.height = (570 * zooms[i]) + 'px';
+  inner.parentNode.style.width  = (360 * zooms[i]) + 'px';
+}));
+inner.parentNode.style.height = '570px';
+inner.parentNode.style.width  = '360px';
+
+// 开关
+bg[0].addEventListener('click', () => {
+  const on = bg[0].classList.toggle('on');
+  grid.style.display = on ? '' : 'none';
+});
+bg[1].addEventListener('click', () => {
+  const on = bg[1].classList.toggle('on');
+  guides.style.display = on ? '' : 'none';
+});
+</script>
+</body>
+</html>
