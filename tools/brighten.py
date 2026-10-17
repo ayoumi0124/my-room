@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# qb.png 亮度三档 · 纯标准库（不依赖 ImageMagick / Pillow）
+# qb.png 调色三档 · 纯标准库（不依赖 ImageMagick / Pillow）
 # 用法: python3 brighten.py [源文件] [输出前缀]
 import sys, zlib, struct
 
@@ -12,9 +12,9 @@ def read_png(path):
         raise SystemExit("不是 PNG 文件: " + path)
     i, w, h, bd, ct, idat = 8, 0, 0, 0, 0, b""
     while i < len(d):
-        ln = struct.unpack(">I", d[i:i+4])[0]
-        typ = d[i+4:i+8]
-        data = d[i+8:i+8+ln]
+        ln = struct.unpack(">I", d[i:i + 4])[0]
+        typ = d[i + 4:i + 8]
+        data = d[i + 8:i + 8 + ln]
         if typ == b"IHDR":
             w, h, bd, ct = struct.unpack(">IIBB", data[:10])
         elif typ == b"IDAT":
@@ -69,15 +69,33 @@ def write_png(path, w, h, px):
             chunk(b"IDAT", zlib.compress(bytes(raw), 9)) + chunk(b"IEND", b""))
     open(path, "wb").write(body)
 
+def clamp(v):
+    return 0 if v < 0 else (255 if v > 255 else int(round(v)))
+
 w, h, px = read_png(SRC)
 print("源图 %d x %d" % (w, h))
-for tag, gain in (("20", 1.20), ("35", 1.35), ("50", 1.50)):
+
+# tag, 亮度倍率, 饱和度倍率
+JOBS = (
+    ("sat125", 1.00, 1.25),
+    ("sat140", 1.00, 1.40),
+    ("sat125b", 1.15, 1.25),
+)
+for tag, gain, sat in JOBS:
     buf = bytearray(px)
     for i in range(0, len(buf), 4):
-        for k in range(3):
-            v = int(buf[i + k] * gain)
-            buf[i + k] = 255 if v > 255 else v
-    p = "%s_+%s.png" % (PRE, tag)
+        if buf[i + 3] == 0:
+            continue
+        r, g, b = buf[i], buf[i + 1], buf[i + 2]
+        lum = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        r = lum + (r - lum) * sat
+        g = lum + (g - lum) * sat
+        b = lum + (b - lum) * sat
+        buf[i] = clamp(r * gain)
+        buf[i + 1] = clamp(g * gain)
+        buf[i + 2] = clamp(b * gain)
+    p = "%s_%s.png" % (PRE, tag)
     write_png(p, w, h, buf)
     print("写出 " + p)
-print("好了。浏览器打开 /static/tiles/ 下面那三张，挑一张。")
+
+print("好了。三张都在 /static/tiles/ 下面。")
