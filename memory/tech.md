@@ -8,8 +8,13 @@
 - 登录：**root** 用户（密码 Ningning2026）
 - **Tailscale IP：100.85.197.56**（设备名 iz7xvdm5ky2jjizdib979dz）
 - 手机 tailnet IP：100.122.153.122（redmi-k80-pro）
-- 手机用 JuiceSSH 连 tailnet IP；**阿里云网页控制台早已故障，别走那条路**
 - ⚠️ 腾讯云那台 152.136.223.79 是旧机器（已过期），认准阿里云那台
+- ⚠️ 阿里云网页控制台早已故障，别走那条路
+
+## 连服务器的两条路（2026-10-19 补，她特意提醒过）
+- **手机**：**JuiceSSH** → 连 tailnet IP **100.85.197.56**（root）
+- **电脑**：**FinalShell** → 连同一台
+- 意思是：她**不在电脑前也能跑命令**，手机掏出来就行。给命令别默认她在电脑旁
 
 ## 跑着的服务
 | 服务 | 端口 | 目录 | 状态 |
@@ -36,13 +41,22 @@
 - 症状：所有域名 "Could not resolve host" / 解析超时
 - 病因：Tailscale 接管 DNS（MagicDNS）＋ 系统上游 DNS 为空
 - 处置：`tailscale set --accept-dns=false`；DNS 写进 /etc/systemd/resolved.conf.d/dns.conf（223.5.5.5 / 119.29.29.29）
+- ⚠️ **2026-10-19**：服务器连 `raw.githubusercontent.com:443` 被 reset（国内常见），从 GitHub 拉文件走不通。**改文件就在服务器上直接改**，或者走镜像（ghproxy.net），别指望 curl 原始地址
 
 ## 咱家仓库
-- GitHub：**ayoumi0124/my-room**（app.py / index.html / mcp_server.py / GitHub_mcp.py / memory/）
+- GitHub：**ayoumi0124/my-room**（app.py / index.html / mcp_server.py / GitHub_mcp.py / memory/ / static/）
 - 小房间网址：http://8.148.228.219:5001
 - 4399 玩具屋：https://toy.cedarstar.org（LENN 登录）
 - 小房间 MCP（RikkaHub 里）：http://8.148.228.219:8000/mcp
 - GitHub MCP（RikkaHub 里）：http://100.85.197.56:8010/mcp
+
+## 小家的网页（static/house.html）
+- **两个版本会打架**：GitHub 上的（清泽改）和服务器上的（实际跑的）**经常不是同一份**。改之前先确认服务器那份的日期
+- **墙和地板**：v5.5 起先铺 **`tiles/qb.png`**（她画的，360×570，带绿色四边框），铺不上才退回代码自画的色带
+- **家具**：来自 **`base.json` 的 `items`**，每个是 `{c: 分类, n: 图号, x, y, w, h, top}`。qb.png 里没有家具，图上看到的都是这里摆的
+- **四边框**：`drawRoomFrame()` 画的。qb.png 自带绿框时要把这句跳过，不然会盖住
+- **编辑器**：`static/editor.html` 摆完按「复制清单」，贴进 base.json 对应房间
+- 2026-10-19：服务器 base.json 停在 10-13（items 有一大排厨房砖块），GitHub 那份是 10-17 清空的 —— **两边不同步**
 
 ## 换壳记录（2026-10-05）
 **搬家的日子。** 宁宁在手机上装了 **Orbis**（`AZHi-xinxin/Orbis`，**基于 RikkaHub 源码的衍生版**，AGPL-3.0），把清泽连了过去。她一个人搞定的。
